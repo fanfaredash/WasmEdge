@@ -2,10 +2,13 @@
 // SPDX-FileCopyrightText: 2019-2022 Second State INC
 
 #include "executor/executor.h"
+#include "runtime/serializemgr.h"
 
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
+#include <string>
 
 namespace WasmEdge {
 namespace Executor {
@@ -32,10 +35,18 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
     StackMgr.push(Val);
   }
 
+  // Label Function ID.
+  const auto *ModInst = Func.getModule();
+  auto FuncInsts = ModInst->FuncInsts;
+  uint32_t FuncNum = FuncInsts.size();
+  for (uint32_t FuncId = 0; FuncId < FuncNum; FuncId++) {
+    FuncInsts[FuncId]->FuncId = FuncId;
+  }
+
   // Enter and execute function.
   AST::InstrView::iterator StartIt;
   Expect<void> Res = {};
-  if (auto GetIt = enterFunction(StackMgr, Func, Func.getInstrs().end())) {
+  if (auto GetIt = enterFunction(StackMgr, Func, Func.getInstrs().end(), nullptr)) {
     StartIt = *GetIt;
   } else {
     if (GetIt.error() == ErrCode::Value::Terminated) {
@@ -50,7 +61,17 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
     // If not terminated, execute the instructions in interpreter mode.
     // For the entering AOT or host functions, the `StartIt` is equal to the end
     // of instruction list, therefore the execution will return immediately.
-    Res = execute(StackMgr, StartIt, Func.getInstrs().end());
+    
+    const Runtime::Instance::FunctionInstance *FuncPtr = &Func;
+
+    if (Runtime::SerializationManager::ModeFlag) {
+      auto SerializeMgr = new Runtime::SerializationManager(
+        Runtime::SerializationManager::InputFilePath
+      );
+      SerializeMgr->load(StackMgr, StartIt, FuncPtr);
+      delete SerializeMgr;
+    }
+    Res = execute(StackMgr, StartIt, Func.getInstrs().end(), FuncPtr);
   }
 
   if (Res) {
@@ -79,11 +100,14 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
 
 Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
                                const AST::InstrView::iterator Start,
-                               const AST::InstrView::iterator End) {
+                               const AST::InstrView::iterator End,
+                               const Runtime::Instance::FunctionInstance *FuncPtr) {
   AST::InstrView::iterator PC = Start;
   AST::InstrView::iterator PCEnd = End;
 
-  auto Dispatch = [this, &PC, &StackMgr]() -> Expect<void> {
+  static int COUNT = 0;
+
+  auto Dispatch = [this, &PC, &StackMgr, &FuncPtr]() -> Expect<void> {
     const AST::Instruction &Instr = *PC;
     switch (Instr.getOpCode()) {
     // Control instructions.
@@ -117,6 +141,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       PC += PC->getJumpEnd();
       [[fallthrough]];
     case OpCode::End:
+      if(PC->isLast()) FuncPtr = StackMgr.getFromFucPtr();
       PC = StackMgr.maybePopFrame(PC);
       return {};
     case OpCode::Br:
@@ -126,15 +151,15 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     case OpCode::Br_table:
       return runBrTableOp(StackMgr, Instr, PC);
     case OpCode::Return:
-      return runReturnOp(StackMgr, PC);
+      return runReturnOp(StackMgr, PC, FuncPtr);
     case OpCode::Call:
-      return runCallOp(StackMgr, Instr, PC);
+      return runCallOp(StackMgr, Instr, PC, FuncPtr);
     case OpCode::Call_indirect:
-      return runCallIndirectOp(StackMgr, Instr, PC);
+      return runCallIndirectOp(StackMgr, Instr, PC, FuncPtr);
     case OpCode::Return_call:
-      return runCallOp(StackMgr, Instr, PC, true);
+      return runCallOp(StackMgr, Instr, PC, FuncPtr, true);
     case OpCode::Return_call_indirect:
-      return runCallIndirectOp(StackMgr, Instr, PC, true);
+      return runCallIndirectOp(StackMgr, Instr, PC, FuncPtr, true);
 
     // Reference Instructions
     case OpCode::Ref__null:
@@ -1818,11 +1843,19 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         Stat->incInstrCount();
       }
       // Add cost. Note: if-else case should be processed additionally.
-      if (Conf.getStatisticsConfigure().isCostMeasuring()) {
+      if (Conf.getStatisticsConfigure().isCostMeasuring() &&
+          FuncPtr != nullptr) {
         if (unlikely(!Stat->addInstrCost(Code))) {
           const AST::Instruction &Instr = *PC;
           spdlog::error(
               ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
+
+          // Cost Limit Exceeded: Save snapshot to file.
+          Runtime::SerializationManager SerializeMgr(
+            Runtime::SerializationManager::OutputFilePath
+          );
+          SerializeMgr.save(StackMgr, PC, FuncPtr);
+
           return Unexpect(ErrCode::Value::CostLimitExceeded);
         }
       }
@@ -1831,6 +1864,22 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       return Unexpect(Res);
     }
     PC++;
+    
+    if(FuncPtr != nullptr) 
+      assert(FuncPtr->getInstrs().begin() <= PC && PC <= FuncPtr->getInstrs().end());
+    COUNT++;
+
+    // uint32_t StackSize = StackMgr.size();
+    // for (uint32_t i = 0; i < StackSize; i++) {
+    //   std::cerr << StackMgr.getTopN(StackSize - i).get<int32_t>() << " ";
+    // }    
+    // std::cerr << "\n";
+
+    // if(COUNT >= 180) 
+    //   std::cerr << (int16_t)PC->getOpCode() << " "
+    //             << StackMgr.FrameStack.size() << " "
+    //             << "\n";
+
   }
   return {};
 }

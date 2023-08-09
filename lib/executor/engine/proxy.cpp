@@ -97,7 +97,7 @@ Expect<void> Executor::call(Runtime::StackManager &StackMgr,
 
   auto Instrs = FuncInst->getInstrs();
   AST::InstrView::iterator StartIt;
-  if (auto Res = enterFunction(StackMgr, *FuncInst, Instrs.end())) {
+  if (auto Res = enterFunction(StackMgr, *FuncInst, Instrs.end(), nullptr)) { // 这里疑似是 AOT 用的。占个坑先
     StartIt = *Res;
   } else {
     return Unexpect(Res);
@@ -187,7 +187,7 @@ Executor::callIndirect(Runtime::StackManager &StackMgr, const uint32_t TableIdx,
 
   auto Instrs = FuncInst->getInstrs();
   AST::InstrView::iterator StartIt;
-  if (auto Res = enterFunction(StackMgr, *FuncInst, Instrs.end())) {
+  if (auto Res = enterFunction(StackMgr, *FuncInst, Instrs.end(), nullptr)) {
     StartIt = *Res;
   } else {
     return Unexpect(Res);

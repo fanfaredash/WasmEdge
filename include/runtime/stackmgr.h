@@ -25,14 +25,19 @@ class StackManager {
 public:
   struct Frame {
     Frame() = delete;
+    Frame(const Instance::ModuleInstance *Mod) : Module(Mod) {}
+
     Frame(const Instance::ModuleInstance *Mod, AST::InstrView::iterator FromIt,
-          uint32_t L, uint32_t A, uint32_t V) noexcept
-        : Module(Mod), From(FromIt), Locals(L), Arity(A), VPos(V) {}
+          uint32_t L, uint32_t A, uint32_t V, 
+          const Instance::FunctionInstance *F) noexcept: Module(Mod), 
+          From(FromIt), Locals(L), Arity(A), VPos(V), FromFuncPtr(F) {}
+        
     const Instance::ModuleInstance *Module;
     AST::InstrView::iterator From;
     uint32_t Locals;
     uint32_t Arity;
     uint32_t VPos;
+    const Instance::FunctionInstance *FromFuncPtr;
   };
 
   using Value = ValVariant;
@@ -77,10 +82,13 @@ public:
 
   /// Push a new frame entry to stack.
   void pushFrame(const Instance::ModuleInstance *Module,
-                 AST::InstrView::iterator From, uint32_t LocalNum = 0,
-                 uint32_t Arity = 0, bool IsTailCall = false) noexcept {
+                 AST::InstrView::iterator From, 
+                 uint32_t LocalNum = 0, uint32_t Arity = 0, 
+                 const Instance::FunctionInstance *FromFuncPtr = nullptr,
+                 bool IsTailCall = false) noexcept {
     if (likely(!IsTailCall)) {
-      FrameStack.emplace_back(Module, From, LocalNum, Arity, ValueStack.size());
+      FrameStack.emplace_back(Module, From, LocalNum, 
+                              Arity, ValueStack.size(), FromFuncPtr);
     } else {
       assuming(!FrameStack.empty());
       assuming(FrameStack.back().VPos >= FrameStack.back().Locals);
@@ -92,6 +100,7 @@ public:
       FrameStack.back().Module = Module;
       FrameStack.back().Locals = LocalNum;
       FrameStack.back().Arity = Arity;
+      FrameStack.back().FromFuncPtr = FromFuncPtr;
       FrameStack.back().VPos = static_cast<uint32_t>(ValueStack.size());
     }
   }
@@ -126,6 +135,10 @@ public:
     return PC;
   }
 
+  const Instance::FunctionInstance *getFromFucPtr() noexcept {
+    return FrameStack.back().FromFuncPtr;
+  }
+
   /// Unsafe getter of module address.
   const Instance::ModuleInstance *getModule() const noexcept {
     assuming(!FrameStack.empty());
@@ -144,6 +157,10 @@ private:
   std::vector<Value> ValueStack;
   std::vector<Frame> FrameStack;
   /// @}
+
+  friend class Executor::Executor;
+  friend class Runtime::SerializationManager;
+
 };
 
 } // namespace Runtime

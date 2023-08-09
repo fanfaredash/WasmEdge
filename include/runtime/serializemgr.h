@@ -1,0 +1,347 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2019-2022 Second State INC
+
+//===-- wasmedge/runtime/serializemgr.h - Serialization Manager definition ------------===//
+//
+// Part of the WasmEdge-Snapshot Project.
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file contains the definition of Serialization Manager.
+///
+//===----------------------------------------------------------------------===//
+#pragma once
+
+#include "runtime/stackmgr.h"
+#include "runtime/instance/module.h"
+#include "runtime/instance/memory.h"
+#include "common/types.h"
+
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/variant.hpp>
+#include <boost/serialization/split_free.hpp>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+
+namespace WasmEdge {
+namespace Runtime {
+
+class SerializationManager {
+public:  
+  typedef boost::archive::text_iarchive InputArchive;
+	typedef boost::archive::text_oarchive OutputArchive;
+  using Value = ValVariant;
+  using Frame = Runtime::StackManager::Frame;
+
+  static inline constexpr const uint64_t kPageSize = UINT64_C(65536);
+  static inline constexpr const int64_t ZipFactor = 16;
+  static inline uint64_t ModeFlag = 0;
+  static inline std::string InputFilePath;
+  static inline std::string OutputFilePath = "test.meta";
+
+  SerializationManager() = delete;
+  SerializationManager(const std::string &Path)
+    : ArchiveFilePath(Path) {}
+
+public:
+  void save(Runtime::StackManager &StackMgr, AST::InstrView::iterator PC,
+            const Runtime::Instance::FunctionInstance *FromFuncPtr) {
+    OFS.open(ArchiveFilePath);
+    OutputArchive OA{OFS};
+    save_stack(OA, StackMgr);
+    save_global(OA, StackMgr);
+    save_memory(OA, StackMgr);
+    save_pc(OA, PC, FromFuncPtr);
+    OFS.close();
+  }
+
+  void load(Runtime::StackManager &StackMgr, AST::InstrView::iterator &PC,
+            const Runtime::Instance::FunctionInstance *&FromFuncPtr) {
+    IFS.open(ArchiveFilePath);
+    InputArchive IA{IFS};
+    load_stack(IA, StackMgr);
+    load_global(IA, StackMgr);
+    load_memory(IA, StackMgr);
+    load_pc(IA, StackMgr, PC, FromFuncPtr);
+    IFS.close();
+  }
+
+protected:
+  void save_int(OutputArchive &OA, uint32_t i) {
+    OA << i;
+  }
+
+  uint32_t load_int(InputArchive &IA) {
+    uint32_t i;
+    IA >> i;
+    return i;
+  }
+
+  void save_stack(OutputArchive &OA, Runtime::StackManager &StackMgr) {
+    // Save ValueStack size and elements.
+    uint32_t StackSize = StackMgr.size();
+    OA << StackSize;
+    for (uint32_t i = 0; i < StackSize; i++) {
+      save_value(OA, StackMgr.ValueStack[i]);
+    }
+
+    // Save Frame (except base frame and start frame). 
+    StackSize = StackMgr.FrameStack.size();
+    OA << StackSize;
+    for (uint32_t i = 2; i < StackSize; i++) {
+      Frame frame = StackMgr.FrameStack[i];
+      OA << frame.Locals << frame.Arity << frame.VPos;
+      save_pc(OA, frame.From, frame.FromFuncPtr);
+    }
+  }
+
+  void load_stack(InputArchive &IA, Runtime::StackManager &StackMgr) {
+    // Restore value stack elements.
+    StackMgr.stackErase(StackMgr.size(), 0);
+    uint32_t StackSize;
+    IA >> StackSize;
+    for (uint32_t i = 0; i < StackSize; i++) {
+      StackMgr.push(load_value(IA));
+    }
+
+    // Load Frame.
+    IA >> StackSize;
+    // StackMgr.FrameStack.resize(StackSize);
+    for (uint32_t i = 2; i < StackSize; i++) {
+      Frame frame(StackMgr.getModule());
+      IA >> frame.Locals >> frame.Arity >> frame.VPos;
+      load_pc(IA, StackMgr, frame.From, frame.FromFuncPtr);
+      StackMgr.FrameStack.push_back(frame);
+    }
+  }
+
+  void save_global(OutputArchive &OA, Runtime::StackManager &StackMgr) {
+    const auto *ModInst = StackMgr.getModule();
+
+    // Save global elements.
+    uint32_t GlobalNum = ModInst->getGlobalNum();
+    OA << GlobalNum;
+    for (uint32_t i = 0; i < GlobalNum; i++) {
+      save_value(OA, (*ModInst->getGlobal(i))->getValue());
+    }
+  }
+
+  void load_global(InputArchive &IA, Runtime::StackManager &StackMgr) {
+    const auto *ModInst = StackMgr.getModule();
+
+    // Restore global elements.
+    uint32_t GlobalNum;
+    IA >> GlobalNum;
+    for (uint32_t i = 0; i < GlobalNum; i++) {
+      ModInst->unsafeGetGlobal(i)->getValue() = load_value(IA);
+    }
+  }
+
+  void save_memory(OutputArchive &OA, Runtime::StackManager &StackMgr) {
+    const auto *ModInst = StackMgr.getModule();
+    if (!ModInst->MemInsts.size()) return ;
+    
+    // Save memory as uint8 elements.
+    auto Mem = ModInst->unsafeGetMemory(0);
+    auto MemType = Mem->getMemoryType();
+    uint64_t MemPages = MemType.getLimit().getMin();
+    uint64_t ElemNum = MemPages * (kPageSize / sizeof(uint8_t));
+    uint8_t *DataPtr = Mem->getDataPtr();
+    OA << ElemNum;
+    if (ElemNum == 0) return ;
+
+    // Compress identical elements.
+    int64_t count = 1;
+    std::vector<uint32_t> tempVec(1, DataPtr[0]);
+
+    // Compress identical elements of length "count".
+    auto Dispatch = [&] (uint64_t i) {
+      uint64_t length = tempVec.size() - count;
+      if (length) {
+        OA << length;
+        for(uint64_t j = 0; j < length; j++) {
+          OA << tempVec[j];
+        }
+      }
+      if (count) {
+        OA << -count << DataPtr[i - 1];
+      }
+      tempVec.resize(0);
+    };
+
+    for (uint64_t i = 1; i < ElemNum; i++) {
+      if (DataPtr[i] == DataPtr[i - 1]) {
+        count += 1;
+      } else {
+        if (count >= ZipFactor) {
+          Dispatch(i);
+        }
+        count = 1;
+      }
+      tempVec.push_back(DataPtr[i]);
+    }
+    if (count < ZipFactor) count = 0;
+    Dispatch(ElemNum);
+    OA << 0;
+  }
+
+  void load_memory(InputArchive &IA, Runtime::StackManager &StackMgr) {
+    const auto *ModInst = StackMgr.getModule();
+    if (!ModInst->MemInsts.size()) return ;
+
+    // Load uint8 elements to buffer.
+    auto Mem = ModInst->unsafeGetMemory(0);
+    auto MemType = Mem->getMemoryType();
+    uint64_t MemPages = MemType.getLimit().getMin();
+    uint8_t *DataPtr = Mem->getDataPtr();
+    uint64_t ElemNum;
+    IA >> ElemNum;    
+    uint8_t *Buffer = new uint8_t[ElemNum];
+    
+    // Parse uint8 elements from compression.
+    uint64_t index = 0;
+    int64_t count;
+    IA >> count;
+    while (count) {
+      if (count > 0) {
+        for (int64_t i = 0; i < count; i++) {
+          IA >> Buffer[index++];
+        }
+      } else {
+        uint8_t x;
+        IA >> x;
+        for (int64_t i = 0; i < -count; i++) {
+          Buffer[index++] = x;
+        }
+      }
+      IA >> count;
+    }
+    
+    // Check if page growing is needed.
+    if (ElemNum / (kPageSize / sizeof(uint8_t)) > MemPages) {
+      Mem->growPage(ElemNum / (kPageSize / sizeof(uint8_t)) - MemPages);
+    }
+
+    // Copy buffer to memory.
+    for (uint32_t i = 0; i < ElemNum; i++) {
+      DataPtr[i] = Buffer[i];
+    }
+    delete[] Buffer;
+  }
+
+  void save_pc(OutputArchive &OA, 
+               AST::InstrView::iterator PC, 
+               const Runtime::Instance::FunctionInstance *FromFuncPtr) {
+
+    AST::InstrView::iterator StartIt = FromFuncPtr->getInstrs().begin();
+  
+    uint32_t FuncId = FromFuncPtr->FuncId;
+    uint32_t InstrId = PC - StartIt;
+    OA << FuncId << InstrId;
+  }
+
+  void load_pc(InputArchive &IA,
+               Runtime::StackManager &StackMgr, 
+               AST::InstrView::iterator &PC, 
+               const Runtime::Instance::FunctionInstance *&FromFuncPtr) {
+      
+      const auto *ModInst = StackMgr.getModule();
+    
+      uint32_t FuncId;
+      uint32_t InstrId;
+      IA >> FuncId >> InstrId;
+    
+      FromFuncPtr = ModInst->FuncInsts[FuncId];
+      AST::InstrView::iterator StartIt = FromFuncPtr->getInstrs().begin();
+      PC = StartIt + InstrId;
+    }
+
+private:
+  std::string ArchiveFilePath;
+  std::ifstream IFS;
+  std::ofstream OFS;
+
+  std::pair<uint64_t,uint64_t> uint128_t_encode(uint128_t src) {
+  #if defined(__x86_64__) || defined(__aarch64__) || \
+    (defined(__riscv) && __riscv_xlen == 64)
+    constexpr const uint128_t bottom_mask = (uint128_t{1} << 64) - 1;
+    constexpr const uint128_t top_mask = ~bottom_mask;
+    return { src & bottom_mask, (src & top_mask) >> 64 };
+  #else
+    return { V.high(), V.low() };
+  #endif
+  }
+
+  uint128_t uint128_t_decode(uint64_t src1, uint64_t src2) {
+  #if defined(__x86_64__) || defined(__aarch64__) || \
+    (defined(__riscv) && __riscv_xlen == 64)
+    return (uint128_t{src2} << 64) | src1;
+  #else
+    return uint128_t{ V.high(), V.low() };
+  #endif
+  }
+
+  void save_value(OutputArchive &OA, Value &V) {
+    auto ValuePair = uint128_t_encode(V.get<uint128_t>());
+    OA << ValuePair.first << ValuePair.second;
+  }
+
+  Value load_value(InputArchive &IA) {
+    uint64_t src1, src2;
+    IA >> src1 >> src2;
+    return Value{uint128_t_decode(src1, src2)};
+  }
+};
+
+} // namespace Runtime
+} // namespace WasmEdge
+
+
+/*
+
+namespace boost { 
+namespace serialization {
+
+using WasmEdge::ValVariant;
+using WasmEdge::uint128_t;
+
+template<class Archive>
+void save(Archive & ar, const uint128_t & Val, unsigned int version) {
+  std::ignore = version;
+  uint128_t src = Val;//.get<uint128_t>();
+  #if defined(__x86_64__) || defined(__aarch64__) || \
+    (defined(__riscv) && __riscv_xlen == 64)
+    constexpr const uint128_t bottom_mask = (uint128_t{1} << 64) - 1;
+    constexpr const uint128_t top_mask = ~bottom_mask;
+    ar << (src & bottom_mask);
+    ar << ((src & top_mask) >> 64);
+  #else
+    ar << (V.high());
+    ar << (V.low());
+  #endif
+}
+
+template<class Archive>
+void load(Archive & ar, uint128_t & Val, unsigned int version) {
+  std::ignore = version;
+  uint64_t src1, src2;
+  ar >> src1 >> src2;
+  #if defined(__x86_64__) || defined(__aarch64__) || \
+    (defined(__riscv) && __riscv_xlen == 64)
+    Val = (uint128_t{src2} << 64) | src1;
+  #else
+    Val = uint128_t{ V.high(), V.low() };
+  #endif
+}
+
+
+} //namespace serialization 
+} // namespace boost
+
+BOOST_SERIALIZATION_SPLIT_FREE(ValVariant)
+
+*/
