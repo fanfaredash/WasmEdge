@@ -14,11 +14,13 @@ if(WASMEDGE_BUILD_AOT_RUNTIME)
     target_link_libraries(wasmedgec
       PRIVATE
       wasmedgeCAPI
+      Boost::serialization
     )
   else()
     target_link_libraries(wasmedgec
       PRIVATE
       wasmedge_shared
+      Boost::serialization
     )
   endif()
 endif()
@@ -35,11 +37,13 @@ if(WASMEDGE_LINK_TOOLS_STATIC)
   target_link_libraries(wasmedge
     PRIVATE
     wasmedgeCAPI
+    Boost::serialization
   )
 else()
   target_link_libraries(wasmedge
     PRIVATE
     wasmedge_shared
+    Boost::serialization
   )
 endif()
 

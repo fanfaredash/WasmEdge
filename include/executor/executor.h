@@ -32,6 +32,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -95,7 +96,8 @@ public:
       : Conf(Conf) {
     if (Conf.getStatisticsConfigure().isInstructionCounting() ||
         Conf.getStatisticsConfigure().isCostMeasuring() ||
-        Conf.getStatisticsConfigure().isTimeMeasuring()) {
+        Conf.getStatisticsConfigure().isTimeMeasuring() ||
+        Conf.getStatisticsConfigure().isSnapShotting()) {
       Stat = S;
     } else {
       Stat = nullptr;
@@ -153,7 +155,8 @@ private:
   /// Execute instructions.
   Expect<void> execute(Runtime::StackManager &StackMgr,
                        const AST::InstrView::iterator Start,
-                       const AST::InstrView::iterator End);
+                       const AST::InstrView::iterator End,
+                       const Runtime::Instance::FunctionInstance *FuncPtr = nullptr);
 
   /// \name Functions for instantiation.
   /// @{
@@ -214,7 +217,9 @@ private:
   Expect<AST::InstrView::iterator>
   enterFunction(Runtime::StackManager &StackMgr,
                 const Runtime::Instance::FunctionInstance &Func,
-                const AST::InstrView::iterator RetIt, bool IsTailCall = false);
+                const AST::InstrView::iterator RetIt, 
+                const Runtime::Instance::FunctionInstance *FromFuncPtr,
+                bool IsTailCall = false);
 
   /// Helper function for branching to label.
   Expect<void> branchToLabel(Runtime::StackManager &StackMgr,
@@ -262,14 +267,18 @@ private:
                             const AST::Instruction &Instr,
                             AST::InstrView::iterator &PC) noexcept;
   Expect<void> runReturnOp(Runtime::StackManager &StackMgr,
-                           AST::InstrView::iterator &PC) noexcept;
+                           AST::InstrView::iterator &PC,
+                           const Runtime::Instance::FunctionInstance *&FromFuncPtr
+                           ) noexcept;
   Expect<void> runCallOp(Runtime::StackManager &StackMgr,
                          const AST::Instruction &Instr,
                          AST::InstrView::iterator &PC,
+                         const Runtime::Instance::FunctionInstance *&FuncPtr,
                          bool IsTailCall = false) noexcept;
   Expect<void> runCallIndirectOp(Runtime::StackManager &StackMgr,
                                  const AST::Instruction &Instr,
                                  AST::InstrView::iterator &PC,
+                                 const Runtime::Instance::FunctionInstance *&FuncPtr,
                                  bool IsTailCall = false) noexcept;
   /// ======= Variable instructions =======
   Expect<void> runLocalGetOp(Runtime::StackManager &StackMgr,
