@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2019-2022 Second State INC
 
+enable_language( C CXX ASM )
 cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0091 NEW)
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
@@ -37,7 +38,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+  set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 include(FetchContent)
@@ -151,6 +152,15 @@ endif()
 if(WASMEDGE_BUILD_EXAMPLE)
   add_subdirectory(examples/plugin/get-string)
 endif()
+
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/boost" EXCLUDE_FROM_ALL)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0")
+
+add_executable(main main.cc)
+target_link_libraries(main
+	wasmedge_shared
+  Boost::serialization
+)
 
 include(CPack)
 include(CPackComponent)

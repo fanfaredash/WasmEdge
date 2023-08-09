@@ -16,7 +16,9 @@ namespace Executor {
 Expect<AST::InstrView::iterator>
 Executor::enterFunction(Runtime::StackManager &StackMgr,
                         const Runtime::Instance::FunctionInstance &Func,
-                        const AST::InstrView::iterator RetIt, bool IsTailCall) {
+                        const AST::InstrView::iterator RetIt, 
+                        const Runtime::Instance::FunctionInstance *FromFuncPtr,
+                        bool IsTailCall) {
   // RetIt: the return position when the entered function returns.
 
   // Check if the interruption occurs.
@@ -49,6 +51,7 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
                        RetIt,            // Return PC
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
+                       nullptr,          // ...
                        IsTailCall        // For tail-call
     );
 
@@ -102,6 +105,7 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
                        RetIt,            // Return PC
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
+                       nullptr,          // ...
                        IsTailCall        // For tail-call
     );
 
@@ -166,6 +170,7 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
                        RetIt - 1,                  // Return PC
                        ArgsN + Func.getLocalNum(), // Arguments num + local num
                        RetsN,                      // Returns num
+                       FromFuncPtr,                // For serialization
                        IsTailCall                  // For tail-call
     );
 

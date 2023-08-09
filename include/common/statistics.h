@@ -20,6 +20,8 @@
 #include "common/span.h"
 #include "common/timer.h"
 
+#include "runtime/serializemgr.h"
+
 #include <atomic>
 #include <vector>
 
