@@ -105,8 +105,6 @@ public:
     return *std::get_if<std::unique_ptr<HostFunctionBase>>(&Data)->get();
   }
 
-  uint32_t FuncId;
-
 private:
   struct WasmFunction {
     const std::vector<std::pair<uint32_t, ValType>> Locals;

@@ -70,15 +70,12 @@ Expect<void> Executor::runBrTableOp(Runtime::StackManager &StackMgr,
 }
 
 Expect<void> Executor::runReturnOp(Runtime::StackManager &StackMgr,
-                                   AST::InstrView::iterator &PC,
-                                   const Runtime::Instance::FunctionInstance *&FromFuncPtr
-                                   ) noexcept {
+                                   AST::InstrView::iterator &PC) noexcept {
   // Check stop token
   if (unlikely(StopToken.exchange(0, std::memory_order_relaxed))) {
     spdlog::error(ErrCode::Value::Interrupted);
     return Unexpect(ErrCode::Value::Interrupted);
   }
-  FromFuncPtr = StackMgr.getFromFucPtr();
   PC = StackMgr.popFrame();
   return {};
 }
@@ -86,16 +83,14 @@ Expect<void> Executor::runReturnOp(Runtime::StackManager &StackMgr,
 Expect<void> Executor::runCallOp(Runtime::StackManager &StackMgr,
                                  const AST::Instruction &Instr,
                                  AST::InstrView::iterator &PC,
-                                 const Runtime::Instance::FunctionInstance *&FuncPtr,
                                  bool IsTailCall) noexcept {
   // Get Function address.
   const auto *ModInst = StackMgr.getModule();
   const auto *FuncInst = *ModInst->getFunc(Instr.getTargetIndex());
-  if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, FuncPtr, IsTailCall); !Res) {
+  if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, IsTailCall); !Res) {
     return Unexpect(Res);
   } else {
     PC = (*Res) - 1;
-    if(FuncInst->isWasmFunction()) FuncPtr = FuncInst;
   }
   return {};
 }
@@ -103,7 +98,6 @@ Expect<void> Executor::runCallOp(Runtime::StackManager &StackMgr,
 Expect<void> Executor::runCallIndirectOp(Runtime::StackManager &StackMgr,
                                          const AST::Instruction &Instr,
                                          AST::InstrView::iterator &PC,
-                                         const Runtime::Instance::FunctionInstance *&FuncPtr,
                                          bool IsTailCall) noexcept {
   // Get Table Instance
   const auto *TabInst = getTabInstByIdx(StackMgr, Instr.getSourceIndex());
@@ -149,11 +143,10 @@ Expect<void> Executor::runCallIndirectOp(Runtime::StackManager &StackMgr,
   }
 
   // Enter the function.
-  if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, FuncPtr, IsTailCall); !Res) {
+  if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, IsTailCall); !Res) {
     return Unexpect(Res);
   } else {
     PC = (*Res) - 1;
-    if(FuncInst->isWasmFunction()) FuncPtr = FuncInst;
   }
   return {};
 }

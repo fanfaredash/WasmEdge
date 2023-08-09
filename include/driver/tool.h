@@ -84,7 +84,6 @@ struct DriverToolOptions {
             PO::MetaVar("PAGE_COUNT"sv)),
         ForbiddenPlugins(PO::Description("List of plugins to ignore."sv),
                          PO::MetaVar("NAMES"sv)) {}
-        // 描述最后一块加
 
   PO::Option<std::string> SoName;
   PO::List<std::string> Args;
@@ -112,9 +111,6 @@ struct DriverToolOptions {
   PO::List<int> GasLim;
   PO::List<int> MemLim;
   PO::List<std::string> ForbiddenPlugins;
-  PO::Option<PO::Toggle> ConfEnableSnapshotting;
-  PO::List<std::string> SnapshotInputDir;
-  PO::List<std::string> SnapshotOutputDir;
 
   void add_option(PO::ArgumentParser &Parser) noexcept {
 
@@ -143,10 +139,7 @@ struct DriverToolOptions {
         .add_option("time-limit"sv, TimeLim)
         .add_option("gas-limit"sv, GasLim)
         .add_option("memory-page-limit"sv, MemLim)
-        .add_option("forbidden-plugin"sv, ForbiddenPlugins)
-        .add_option("enable-snapshot"sv, ConfEnableSnapshotting)
-        .add_option("snapshot-input"sv, SnapshotInputDir)
-        .add_option("snapshot-output"sv, SnapshotOutputDir);
+        .add_option("forbidden-plugin"sv, ForbiddenPlugins);
 
     for (const auto &Path : Plugin::Plugin::getDefaultPluginPaths()) {
       Plugin::Plugin::load(Path);

@@ -8,7 +8,6 @@
 #include "common/version.h"
 #include "driver/tool.h"
 #include "host/wasi/wasimodule.h"
-#include "runtime/serializemgr.h"
 #include "vm/vm.h"
 
 #include <chrono>
@@ -88,7 +87,6 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     Conf.getStatisticsConfigure().setInstructionCounting(true);
     Conf.getStatisticsConfigure().setCostMeasuring(true);
     Conf.getStatisticsConfigure().setTimeMeasuring(true);
-    Conf.getStatisticsConfigure().setSnapShotting(true);
   } else {
     if (Opt.ConfEnableInstructionCounting.value()) {
       Conf.getStatisticsConfigure().setInstructionCounting(true);
@@ -98,20 +96,6 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     }
     if (Opt.ConfEnableTimeMeasuring.value()) {
       Conf.getStatisticsConfigure().setTimeMeasuring(true);
-    }
-    if (Opt.ConfEnableSnapshotting.value()) {
-      Conf.getStatisticsConfigure().setCostMeasuring(true);
-      Conf.getStatisticsConfigure().setSnapShotting(true);
-      if (!Opt.SnapshotInputDir.value().empty()) {
-        Runtime::SerializationManager::ModeFlag = 1;
-        Runtime::SerializationManager::InputFilePath = Opt.SnapshotInputDir.value().back();
-      }
-      if (!Opt.SnapshotOutputDir.value().empty()) {
-        Runtime::SerializationManager::OutputFilePath = Opt.SnapshotOutputDir.value().back();
-      }
-      if (!Opt.GasLim.value().size()) {
-        Conf.getStatisticsConfigure().setCostLimit(2500);
-      }
     }
   }
   if (Opt.ConfForceInterpreter.value()) {

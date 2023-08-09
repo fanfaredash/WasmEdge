@@ -97,6 +97,3 @@ node_modules/
 
 # generated jni files
 bindings/java/wasmedge-java/wasmedge-jni/jni/*.h
-
-# debug files
-debug

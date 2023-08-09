@@ -44,7 +44,6 @@ namespace Runtime {
 
 class StoreManager;
 class CallingFrame;
-class SerializationManager;
 
 namespace Instance {
 
@@ -183,7 +182,6 @@ public:
 protected:
   friend class Executor::Executor;
   friend class Runtime::CallingFrame;
-  friend class Runtime::SerializationManager;
 
   /// Copy the function types in type section to this module instance.
   void addFuncType(const AST::FunctionType &FuncType) {

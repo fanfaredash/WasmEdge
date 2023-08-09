@@ -163,18 +163,9 @@ public:
     TimeMeasuring.store(IsTimeMeasure, std::memory_order_relaxed);
   }
 
-  bool isSnapShotting() const noexcept {
-    return SnapShotting.load(std::memory_order_relaxed);
-  }
-
-  void setSnapShotting(bool IsSnapShot) noexcept {
-    SnapShotting.store(IsSnapShot, std::memory_order_relaxed);
-  }
-
   bool isTimeMeasuring() const noexcept {
     return TimeMeasuring.load(std::memory_order_relaxed);
   }
-
 
   void setCostLimit(uint64_t Cost) noexcept {
     CostLimit.store(Cost, std::memory_order_relaxed);
@@ -188,7 +179,6 @@ private:
   std::atomic<bool> InstrCounting = false;
   std::atomic<bool> CostMeasuring = false;
   std::atomic<bool> TimeMeasuring = false;
-  std::atomic<bool> SnapShotting = false;
   std::atomic<uint64_t> CostLimit = UINT64_C(-1);
 };
 
