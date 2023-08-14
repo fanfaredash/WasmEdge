@@ -287,12 +287,15 @@ private:
 
   void save_value(OutputArchive &OA, Value &V) {
     auto ValuePair = uint128_t_encode(V.get<uint128_t>());
-    OA << ValuePair.first << ValuePair.second;
+    // OA << ValuePair.first << ValuePair.second;
+    OA << ValuePair.first;
   }
 
   Value load_value(InputArchive &IA) {
-    uint64_t src1, src2;
-    IA >> src1 >> src2;
+    uint64_t src1 = 0;
+    uint64_t src2 = 0;
+    // IA >> src1 >> src2;
+    IA >> src1;
     return Value{uint128_t_decode(src1, src2)};
   }
 };
