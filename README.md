@@ -40,11 +40,11 @@ make -j
 ##### wasm 执行器部分代码
 
 - `lib/executor/engine/engine.cpp`：
-  - wasm 解释器执行核心，包含核心函数 `runFunction`，`execute`
-    - `runFunction`：处理 wasm 程序首次进入 `_start` 函数时的操作。
+  - wasm 解释器执行核心，包含核心函数 runFunction，execute
+    - `runFunction`：处理 wasm 程序首次进入 _start 函数时的操作。
     - `execute`：逐字节码解析 wasm 程序，并执行相应功能，计算费用。
-- `lib/executor/helper.cpp`：包含函数 `enterfunction`，维护函数调用时栈帧。
-- `include/runtime/stackmgr.h`：包含核心类 `StackManager`，维护栈帧 `FrameStack` 与运算栈 `ValueStack`。
+- `lib/executor/helper.cpp`：包含函数 enterfunction，维护函数调用时栈帧。
+- `include/runtime/stackmgr.h`：包含核心类 StackManager，维护栈帧 FrameStack 与运算栈 ValueStack。
 
 ##### 命令行参数解析部分代码
 
@@ -54,14 +54,14 @@ make -j
 ##### 序列化部分代码
 
 - `include/runtime/serializemgr.h`：
-  - 包含序列化核心类 `SerializeManager`，基于 `boost` 实现。
+  - 包含序列化核心类 SerializeManager，基于 boost_c++ 实现。
   - 主要保存栈、全局变量、申请的内存、以及 PC。
   - 需要注意 PC 的记录方式：解释器会把每个 wasm 函数的字节码按顺序保存；
     所以序列化的过程中保存了函数的 ID 与指令的 ID，方便获取对应 PC 值。
-- `SerializeManager` 在 `lib/executor/engine/engine.cpp` 中被实例化使用。
+- SerializeManager 在 `lib/executor/engine/engine.cpp` 中被实例化使用。
 
 ##### 字节码费用定义部分代码
 
-- `include/common/statistics.h`：`CostTabDefault` 数组规定了每个字节码消耗的费用。
+- `include/common/statistics.h`：CostTabDefault 数组规定了每个字节码消耗的费用。
   - 字节码功能参考资料：https://pengowray.github.io/wasm-ops/
 
