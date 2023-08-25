@@ -1,82 +1,64 @@
-<div align="right">
+### 基于 wasmedge 的链外计算执行节点
 
-  [中文](README-zh.md) | [正體中文](README-zh-TW.md)
+- 本项目基于 wasmedge 实现了了简易的 wasm 运行时快照保存、恢复、验证功能。
 
-</div>
+#### 编译与运行
 
-<div align="center">
-  
-![WasmEdge Logo](/docs/wasmedge-runtime-logo.png)
+- 编译 wasmedge 项目的方式如下：
 
-WasmEdge is a lightweight, high-performance, and extensible WebAssembly runtime. It is [the fastest Wasm VM](https://ieeexplore.ieee.org/document/9214403) today. WasmEdge is an official sandbox project hosted by the [CNCF](https://www.cncf.io/). Its [use cases](https://wasmedge.org/book/en/use_cases.html) include modern web application architectures (Isomorphic & Jamstack applications), microservices on the edge cloud, serverless SaaS APIs, embedded functions, smart contracts, and smart devices.
+```bash
+# 更新子模块 boost_c++
+git submodule update --init
+# 创建 build 文件夹并编译
+mkdir -p build && cd build
+make -j
+```
 
-![build](https://github.com/WasmEdge/WasmEdge/workflows/build/badge.svg)
-[![codecov](https://codecov.io/gh/WasmEdge/WasmEdge/branch/master/graph/badge.svg)](https://codecov.io/gh/WasmEdge/WasmEdge)
-[![CodeQL](https://github.com/WasmEdge/WasmEdge/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/WasmEdge/WasmEdge/actions/workflows/codeql-analysis.yml)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FWasmEdge%2FWasmEdge.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FWasmEdge%2FWasmEdge?ref=badge_shield)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/5059/badge)](https://bestpractices.coreinfrastructure.org/projects/5059)
+- 使用命令行调起执行节点的方式如下：
 
-</div>
+```bash
+./build/tools/wasmedge/wasmedge --enable-snapshot \
+								--snapshot-input [输入快照路径] \
+								--snapshot-output [输出快照路径] \ 
+								--gas-limit [单次运行费用限制]
+								[wasm程序路径]
+								
+# --snapshot-input 参数为可选，如果不含该参数代表程序从头开始运行
+# 如果运行费用充足，则不生成输出快照
+# 关于如何自定义 opcode 费用见下一部分
+```
 
-# Quick start guides
+- 项目同时提供了一个使用 golang 调起执行节点的示例，位于 `/snapcaller/` 路径下
+  - `snapcaller.go` 提供了两个方法 `WasmRun`、`WasmValidate`，具体使用方法见代码注释
 
-🚀 [Install](https://wasmedge.org/book/en/quick_start/install.html) WasmEdge \
-🤖 [Build](https://wasmedge.org/book/en/extend/build.html) and [contribute to](https://wasmedge.org/book/en/contribute.html) WasmEdge \
-⌨️ [Run](https://wasmedge.org/book/en/quick_start/run_cli.html) a standalone Wasm program or a [JavaScript program](https://wasmedge.org/book/en/dev/js.html) from CLI or [Docker](https://wasmedge.org/book/en/quick_start/use_docker.html) \
-🔌 Embed a Wasm function in your [Node.js](https://wasmedge.org/book/en/embed/node.html), [Go](https://wasmedge.org/book/en/embed/go.html), [Rust](bindings/rust/), or [C](https://wasmedge.org/book/en/embed/c.html) app \
-🛠 Manage and orchestrate Wasm runtimes using [Kubernetes](https://wasmedge.org/book/en/use_cases/kubernetes.html), [data streaming frameworks](https://wasmedge.org/book/en/use_cases/frameworks/app/yomo.html), and [blockchains](https://medium.com/ethereum-on-steroids/running-ethereum-smart-contracts-in-a-substrate-blockchain-56fbc27fc95a) \
-📚 **[Check out our official documentation](https://wasmedge.org/book/en/)**
+#### 代码功能指南
 
-# Introduction
+- 主要介绍 wasmedge 项目中添加的快照功能所涉及的部分。
+- 如果希望深入代码修改的具体细节，可以使用 github 的分支对比功能 [对比](https://github.com/WasmEdge/WasmEdge/compare/master...fanfaredash:WasmEdge:master#diff-a664e8a9fe3fece55102e483bd1a38c8154911d289f64f981e599809b4504fb5) 本仓库与 wasmedge 原项目分支。
 
-The WasmEdge Runtime provides a well-defined execution sandbox for its contained WebAssembly bytecode program. The runtime offers isolation and protection for operating system resources (e.g., file system, sockets, environment variables, processes) and memory space. The most important use case for WasmEdge is to safely execute user-defined or community-contributed code as plug-ins in a software product (e.g., SaaS, software-defined vehicles, edge nodes, or even blockchain nodes). It enables third-party developers, vendors, suppliers, and community members to extend and customize the software product. **[Learn more here](https://wasmedge.org/book/en/use_cases.html)**
+##### wasm 执行器部分代码
 
-## Performance
+- `lib/executor/engine/engine.cpp`：wasm 解释器执行核心，包含核心函数 `runFunction`，`execute`
+  - `runFunction`：处理 wasm 程序首次进入 `_start` 函数时的操作。
+  - `execute`：逐字节码解析 wasm 程序，并执行相应功能，计算费用。
+- `lib/executor/helper.cpp`：包含函数 `enterfunction`，维护函数调用时栈帧。
+- `include/runtime/stackmgr.h`：包含核心类 `StackManager`，维护栈帧 `FrameStack` 与运算栈 `ValueStack`。
 
-* [A Lightweight Design for High-performance Serverless Computing](https://arxiv.org/abs/2010.07115), published on IEEE Software, Jan 2021. [https://arxiv.org/abs/2010.07115](https://arxiv.org/abs/2010.07115)
-* [Performance Analysis for Arm vs. x86 CPUs in the Cloud](https://www.infoq.com/articles/arm-vs-x86-cloud-performance/), published on infoQ.com, Jan 2021. [https://www.infoq.com/articles/arm-vs-x86-cloud-performance/](https://www.infoq.com/articles/arm-vs-x86-cloud-performance/)
-* [WasmEdge is the fastest WebAssembly Runtime in Suborbital Reactr test suite](https://blog.suborbital.dev/suborbital-wasmedge), Dec 2021
+##### 命令行参数解析部分代码
 
-## Features
+- `include/driver/tool.h`：添加了快照相关的命令行参数。
+- `lib/driver/runtimeTool.cpp`：解析完命令行参数后进入这里，然后调起 wasm 解释器执行 wasm 程序。
 
-WasmEdge can run standard WebAssembly bytecode programs compiled from C/C++, Rust, Swift, AssemblyScript, or Kotlin source code. It [runs JavaScript](https://wasmedge.org/book/en/dev/js.html), including 3rd party ES6, CJS, and NPM modules, in a secure, fast, lightweight, portable, and containerized sandbox. It also supports mixing of those languages (e.g., to [use Rust to implement a JavaScript API](https://wasmedge.org/book/en/dev/js/rust.html)), the [Fetch](https://wasmedge.org/book/en/dev/js/fetch.html) API, and [Server-side Rendering (SSR)](https://wasmedge.org/book/en/dev/js/ssr.html) functions on edge servers.
+##### 序列化部分代码
 
-WasmEdge supports [all standard WebAssembly features and many proposed extensions](https://wasmedge.org/book/en/intro/standard.html). It also supports a number of extensions tailored for cloud-native and edge computing uses (e.g., the [WasmEdge network sockets](https://wasmedge.org/book/en/dev/rust/networking.html),[Postgres and MySQL-baesed database driver](https://github.com/WasmEdge/wasmedge-db-examples), and the [WasmEdge Tensorflow extension](https://wasmedge.org/book/en/dev/rust/tensorflow.html)).
+- `include/runtime/serializemgr.h`：包含序列化核心类 `SerializeManager`，基于 `boost` 实现：
+  - 主要保存栈、全局变量、申请的内存、以及 PC。
+  - 需要注意 PC 的记录方式：解释器会把每个 wasm 函数的字节码按顺序保存；
+    所以序列化的过程中保存了函数的 ID 与指令的 ID，方便获取对应 PC 值。
+- `SerializeManager` 在 `lib/executor/engine/engine.cpp` 中被实例化使用。
 
- **Learn more about [technical highlights](https://wasmedge.org/book/en/intro/features.html) of WasmEdge.**
+##### 字节码费用定义部分代码
 
-## Integrations and management
+- `include/common/statistics.h`：`CostTabDefault` 数组规定了每个字节码消耗的费用。
+  - 字节码功能参考资料：https://pengowray.github.io/wasm-ops/
 
-WasmEdge and its contained wasm program can be started from the [CLI](https://wasmedge.org/book/en/index.html) as a new process, or from a existing process. If started from an existing process (e.g., from a running [Node.js](https://wasmedge.org/book/en/embed/node.html) or [Go](https://wasmedge.org/book/en/embed/go.html) or [Rust](bindings/rust/wasmedge-sdk) program), WasmEdge will simply run inside the process as a function. Currently, WasmEdge is not yet thread-safe. In order to use WasmEdge in your own application or cloud-native frameworks, please refer to the guides below.
-
-* [Embed WasmEdge into a host application](https://wasmedge.org/book/en/embed.html)
-* [Orchestrate and manage WasmEdge instances using container tools](https://wasmedge.org/book/en/use_cases/kubernetes.html)
-* [Run a WasmEdge app as a Dapr microservice](https://wasmedge.org/book/en/use_cases/frameworks/mesh/dapr.html)
-* [Use Reactr to embed and extend WasmEdge functions in SaaS](https://wasmedge.org/book/en/use_cases/frameworks/app/reactr.html)
-
-# Community
-
-## Contributing
-
-If you would like to contribute to the WasmEdge project, please refer to our [CONTRIBUTING](https://wasmedge.org/book/en/contribute.html) document for details. If you are looking for ideas, checkout our ["help wanted" issues](https://github.com/WasmEdge/WasmEdge/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)!
-
-## Contact
-
-If you have any questions, feel free to open a GitHub issue on a related project or to join the following channels:
-
-* Mailing list: Send an email to [WasmEdge@googlegroups.com](https://groups.google.com/g/wasmedge/)
-* Discord: Join the [WasmEdge Discord server](https://discord.gg/h4KDyB8XTt)!
-* Slack: Join the #WasmEdge channel on the [CNCF Slack](https://slack.cncf.io/)
-* Twitter: Follow @realwasmedge on [Twitter](https://twitter.com/realwasmedge)
-
-## Community Meeting
-
-We host a monthly community meeting to showcase new features, demo new use cases, and a Q&A part. Everyone is welcome!
-
-Time: The first Tuesday of each month at 11PM Hong Kong Time/ 7AM PST.
-
-[Public meeting agenda/notes](https://docs.google.com/document/d/1iFlVl7R97Lze4RDykzElJGDjjWYDlkI8Rhf8g4dQ5Rk/edit#) | [Zoom link](https://us06web.zoom.us/j/89156807241?pwd=VHl5VW5BbmY2eUtTYkY0Zm9yUHRRdz09)
-
-# License
-
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FWasmEdge%2FWasmEdge.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FWasmEdge%2FWasmEdge?ref=badge_large)
