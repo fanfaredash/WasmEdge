@@ -5,13 +5,14 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
-// 路径按实际情况修改
+// wasmedgeDir 为项目路径，可按实际情况修改；wasmedgePath 不建议修改
 var wasmedgeDir string = "/home/njx/WasmEdge/"
 var wasmedgePath string = "build/tools/wasmedge/wasmedge"
 
-// var argSetGasLimit string = "--gas-limit"
+var argSetGasLimit string = "--gas-limit"
 var argEnableSnapshot string = "--enable-snapshot"
 var argSnapshotInput string = "--snapshot-input"
 var argSnapshotOutput string = "--snapshot-output"
@@ -61,18 +62,20 @@ func execCore(cmd *exec.Cmd) (int, error) {
 	return ExitSuccess, nil
 }
 
-func wasmStart(wasmPath, outputPath string) (int, error) {
+func wasmStart(wasmPath, outputPath string, costLimit int) (int, error) {
 	execPath := wasmedgeDir + wasmedgePath
 	cmd := exec.Command(execPath,
 		argEnableSnapshot,
 		argSnapshotOutput,
 		outputPath,
+		argSetGasLimit,
+		strconv.Itoa(costLimit),
 		wasmPath,
 	)
 	return execCore(cmd)
 }
 
-func wasmContinue(wasmPath, inputPath, outputPath string) (int, error) {
+func wasmContinue(wasmPath, inputPath, outputPath string, costLimit int) (int, error) {
 	execPath := wasmedgeDir + wasmedgePath
 	cmd := exec.Command(execPath,
 		argEnableSnapshot,
@@ -80,6 +83,8 @@ func wasmContinue(wasmPath, inputPath, outputPath string) (int, error) {
 		inputPath,
 		argSnapshotOutput,
 		outputPath,
+		argSetGasLimit,
+		strconv.Itoa(costLimit),
 		wasmPath,
 	)
 	return execCore(cmd)
@@ -87,34 +92,34 @@ func wasmContinue(wasmPath, inputPath, outputPath string) (int, error) {
 
 /* Function: 		WasmRun
  * Description: 	Run wasm program with snapshot input.
- * Arguments: 		wasmPath, inputPath, outputPath.
+ * Arguments: 		wasmPath, inputPath, outputPath, costLimit.
  * Return value:	int, error
  *
  * Explaination: 	如果是首次运行程序，则参数 inputPath 为空串；
  *					如果 gas 充足，返回 ExitSuccess，同时 outputPath 不产生新的快照。
  *					反之，返回 ExitCostLimitExceeded，同时 outputPath 产生新的快照。
  */
-func WasmRun(wasmPath, inputPath, outputPath string) (int, error) {
+func WasmRun(wasmPath, inputPath, outputPath string, costLimit int) (int, error) {
 	if inputPath == "" {
-		return wasmStart(wasmPath, outputPath)
+		return wasmStart(wasmPath, outputPath, costLimit)
 	} else {
-		return wasmContinue(wasmPath, inputPath, outputPath)
+		return wasmContinue(wasmPath, inputPath, outputPath, costLimit)
 	}
 }
 
 /* Function: 		WasmValidate
  * Description: 	Verify snapshot correctness.
- * Arguments: 		wasmPath, snapshotPath, nextSnapshotPath.
+ * Arguments: 		wasmPath, snapshotPath, nextSnapshotPath, costLimit.
  * Return value:	bool, error
  *
  * Explaination: 	如果希望验证程序的首个快照，则参数 snapshotPath 为空串；
  *					如果希望验证程序的最后一个快照，则参数 nextSnapshotPath 为空串。
  */
-func WasmValidate(wasmPath, snapshotPath, nextSnapshotPath string) (bool, error) {
+func WasmValidate(wasmPath, snapshotPath, nextSnapshotPath string, costLimit int) (bool, error) {
 	tempFilePath := createRandomFile()
 	defer removeRandomFile(tempFilePath)
 
-	if exitcode, err := WasmRun(wasmPath, snapshotPath, tempFilePath); err == nil {
+	if exitcode, err := WasmRun(wasmPath, snapshotPath, tempFilePath, costLimit); err == nil {
 		switch exitcode {
 		case ExitSuccess:
 			return nextSnapshotPath == "", nil
