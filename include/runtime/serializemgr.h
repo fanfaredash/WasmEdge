@@ -239,6 +239,7 @@ protected:
 
     AST::InstrView::iterator StartIt = FromFuncPtr->getInstrs().begin();
   
+    // Save PC by recording Function ID and Instrustion ID.
     uint32_t FuncId = FromFuncPtr->FuncId;
     uint32_t InstrId = PC - StartIt;
     OA << FuncId << InstrId;
@@ -285,18 +286,17 @@ private:
   #endif
   }
 
+  // Save value as 64-bit literial. (Instead of 128-bit)
+  // Remember: SIMD operator should not be used.
   void save_value(OutputArchive &OA, Value &V) {
     auto ValuePair = uint128_t_encode(V.get<uint128_t>());
-    // OA << ValuePair.first << ValuePair.second;
     OA << ValuePair.first;
   }
 
   Value load_value(InputArchive &IA) {
-    uint64_t src1 = 0;
-    uint64_t src2 = 0;
-    // IA >> src1 >> src2;
-    IA >> src1;
-    return Value{uint128_t_decode(src1, src2)};
+    uint64_t src = 0;
+    IA >> src;
+    return Value{src};
   }
 };
 
