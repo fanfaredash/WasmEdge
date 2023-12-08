@@ -18,6 +18,10 @@
 #include "runtime/instance/memory.h"
 #include "common/types.h"
 
+#include "host/wasi/wasimodule.h"
+#include "host/wasi/environ.h"
+#include "wasi/api.hpp"
+
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/variant.hpp>
@@ -36,12 +40,16 @@ public:
 	typedef boost::archive::text_oarchive OutputArchive;
   using Value = ValVariant;
   using Frame = Runtime::StackManager::Frame;
+  using Environ = Host::WASI::Environ;
+  using funcArgs = Environ::funcArgs;
 
   static inline constexpr const uint64_t kPageSize = UINT64_C(65536);
   static inline constexpr const int64_t ZipFactor = 16;
-  static inline uint64_t ModeFlag = 0;
   static inline std::string InputFilePath;
   static inline std::string OutputFilePath = "test.meta";
+
+  static inline uint64_t ModeFlag = 0;
+  static inline Host::WasiModule *WasiMod;
 
   SerializationManager() = delete;
   SerializationManager(const std::string &Path)
@@ -56,6 +64,7 @@ public:
     save_global(OA, StackMgr);
     save_memory(OA, StackMgr);
     save_pc(OA, PC, FromFuncPtr);
+    save_environ(OA);
     OFS.close();
   }
 
@@ -67,6 +76,7 @@ public:
     load_global(IA, StackMgr);
     load_memory(IA, StackMgr);
     load_pc(IA, StackMgr, PC, FromFuncPtr);
+    load_environ(IA);
     IFS.close();
   }
 
@@ -79,6 +89,26 @@ protected:
     uint32_t i;
     IA >> i;
     return i;
+  }
+
+  template<typename T>
+  void save_span(OutputArchive &OA, Span<const T> S) {
+    OA << S.size();
+    for(uint32_t i = 0; i < S.size(); i++) {
+      OA << S[i];
+    }
+  }
+
+  template<typename T>
+  Span<const T> load_span(InputArchive &IA) {
+    uint32_t SpanSize;
+    IA >> SpanSize;
+    T* buffer = new T[SpanSize];
+    for(uint32_t i = 0; i < SpanSize; i++) {
+      IA >> buffer[i];
+    }
+    Span<const T> S(buffer, SpanSize);
+    return S;
   }
 
   void save_stack(OutputArchive &OA, Runtime::StackManager &StackMgr) {
@@ -260,6 +290,101 @@ protected:
       AST::InstrView::iterator StartIt = FromFuncPtr->getInstrs().begin();
       PC = StartIt + InstrId;
     }
+
+  void save_environ(OutputArchive &OA) {
+    auto& Env = WasiMod->getEnv();
+    auto& LogName = Env.LogName;
+    auto& LogArgs = Env.LogArgs;
+
+    assert(LogName.size() == LogArgs.size());
+    uint32_t LogSize = LogName.size();
+    OA << LogSize;
+    for (uint32_t i = 0; i < LogSize; i++) {
+      OA << LogName[i];
+      switch (LogName[i])
+      {
+      case Environ::funcName::sockOpen:
+        OA << LogArgs[i].sockOpen.AddressFamily;
+        OA << LogArgs[i].sockOpen.SockType;
+        OA << LogArgs[i].sockOpen.ReFd;
+        break;
+      
+      case Environ::funcName::sockBind:
+        OA << LogArgs[i].sockBind.Fd;
+        OA << LogArgs[i].sockBind.AddressFamily;
+        save_span<uint8_t>(OA, LogArgs[i].sockBind.Address);
+        OA << LogArgs[i].sockBind.Port;
+        break;
+
+      case Environ::funcName::sockConnect:
+        OA << LogArgs[i].sockConnect.Fd;
+        OA << LogArgs[i].sockConnect.AddressFamily;
+        save_span<uint8_t>(OA, LogArgs[i].sockConnect.Address);
+        OA << LogArgs[i].sockConnect.Port;
+        break;
+      }
+    }
+  }
+
+  void load_environ(InputArchive &IA) {
+    auto& Env = WasiMod->getEnv();
+    auto& LogName = Env.LogName;
+    auto& LogArgs = Env.LogArgs;
+
+    uint32_t LogSize;
+    IA >> LogSize;
+    LogName.clear();
+    LogArgs.clear();
+    for (uint32_t i = 0; i < LogSize; i++) {
+      Environ::funcName curFuncName;
+      IA >> curFuncName;
+      switch (curFuncName)
+      {
+      case Environ::funcName::sockOpen:
+        {
+          __wasi_address_family_t AddressFamily;
+          __wasi_sock_type_t SockType;
+          __wasi_fd_t ReFd;
+          IA >> AddressFamily;
+          IA >> SockType;
+          IA >> ReFd;
+          // funcArgs args = {.sockOpen = {AddressFamily, SockType, ReFd}};
+          Env.sockReOpen(AddressFamily, SockType, ReFd);
+          break;
+        }
+      
+      case Environ::funcName::sockBind:
+        {
+          __wasi_fd_t Fd;
+          __wasi_address_family_t AddressFamily;
+          Span<const uint8_t> Address;
+          uint16_t Port;
+          IA >> Fd;
+          IA >> AddressFamily;
+          Address = load_span<uint8_t>(IA);
+          IA >> Port;
+          // funcArgs args = {.sockBind = {Fd, AddressFamily, Address, Port}};
+          Env.sockBind(Fd, AddressFamily, Address, Port);
+          break;
+        }
+
+      case Environ::funcName::sockConnect:
+        {
+          __wasi_fd_t Fd;
+          __wasi_address_family_t AddressFamily;
+          Span<const uint8_t> Address;
+          uint16_t Port;
+          IA >> Fd;
+          IA >> AddressFamily;
+          Address = load_span<uint8_t>(IA);
+          IA >> Port;
+          // funcArgs args = {.sockConnect = {Fd, AddressFamily, Address, Port}};
+          Env.sockConnect(Fd, AddressFamily, Address, Port);
+          break;
+        }
+      }
+    }
+  }
 
 private:
   std::string ArchiveFilePath;

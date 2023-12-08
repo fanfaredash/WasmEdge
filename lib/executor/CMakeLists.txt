@@ -22,6 +22,11 @@ wasmedge_add_library(wasmedgeExecutor
   executor.cpp
 )
 
+target_include_directories(wasmedgeExecutor
+  PUBLIC
+  ${PROJECT_SOURCE_DIR}/thirdparty/
+)
+
 target_link_libraries(wasmedgeExecutor
   PUBLIC
   wasmedgeCommon

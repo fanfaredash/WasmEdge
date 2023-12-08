@@ -1674,6 +1674,15 @@ WasmEdge_ExecutorAsyncInvoke(WasmEdge_ExecutorContext *Cxt,
                              const WasmEdge_Value *Params,
                              const uint32_t ParamLen);
 
+
+/// \param Cxt the WasmEdge_ExecutorContext Status Setter.
+WASMEDGE_CAPI_EXPORT void WasmEdge_ExecutorSetStatus(
+    WasmEdge_ExecutorContext *Cxt, const int32_t Status);
+
+/// \param Cxt the WasmEdge_ExecutorContext Status Getter.
+WASMEDGE_CAPI_EXPORT int32_t WasmEdge_ExecutorGetStatus(
+    WasmEdge_ExecutorContext *Cxt);
+
 /// Deletion of the WasmEdge_ExecutorContext.
 ///
 /// After calling this function, the context will be destroyed and should

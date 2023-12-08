@@ -1839,7 +1839,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
   while (PC != PCEnd) {
     if (Stat) {
       OpCode Code = PC->getOpCode();
-      if (Conf.getStatisticsConfigure().isInstructionCounting()) {
+      if (Conf.getStatisticsConfigure().isInstructionCounting() && !Status) {
         Stat->incInstrCount();
       }
       // Add cost. Note: if-else case should be processed additionally.
@@ -1851,10 +1851,12 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
               ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
 
           // Cost Limit Exceeded: Save snapshot to file.
-          Runtime::SerializationManager SerializeMgr(
-            Runtime::SerializationManager::OutputFilePath
-          );
-          SerializeMgr.save(StackMgr, PC, FuncPtr);
+          if (Conf.getStatisticsConfigure().isSnapShotting()) {
+            Runtime::SerializationManager SerializeMgr(
+              Runtime::SerializationManager::OutputFilePath
+            );
+            SerializeMgr.save(StackMgr, PC, FuncPtr);
+          }
 
           return Unexpect(ErrCode::Value::CostLimitExceeded);
         }

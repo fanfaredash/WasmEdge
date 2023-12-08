@@ -697,6 +697,9 @@ private:
   Statistics::Statistics *Stat;
   /// Stop Execution
   std::atomic_uint32_t StopToken = 0;
+
+public:
+  int32_t Status;
 };
 
 } // namespace Executor

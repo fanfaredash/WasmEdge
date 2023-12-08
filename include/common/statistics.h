@@ -31,7 +31,7 @@ namespace Statistics {
 class Statistics {
 public:
   Statistics(const uint64_t Lim = UINT64_MAX)
-      : CostTab(CostTabDefault, CostTabDefault + 256), InstrCnt(0), CostLimit(Lim), CostSum(0) {
+      : CostTab(CostTabDefault, CostTabDefault + 65536), InstrCnt(0), CostLimit(Lim), CostSum(0) {
   }
   Statistics(Span<const uint64_t> Tab, const uint64_t Lim = UINT64_MAX)
       : CostTab(Tab.begin(), Tab.end()), InstrCnt(0), CostLimit(Lim),
@@ -186,7 +186,7 @@ public:
 
 private:
 
-  constexpr const static uint64_t CostTabDefault[256] = {
+  constexpr const static uint64_t CostTabDefault[65536] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
@@ -195,6 +195,10 @@ private:
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
@@ -202,6 +206,7 @@ private:
   };
 
   // Ref: https://pengowray.github.io/wasm-ops/
+  // Ref: include/common/enum_ast.hpp
 
   std::vector<uint64_t> CostTab;
   std::atomic_uint64_t InstrCnt;

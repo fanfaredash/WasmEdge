@@ -129,6 +129,7 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
 
   Host::WasiModule *WasiMod = dynamic_cast<Host::WasiModule *>(
       VM.getImportModule(HostRegistration::Wasi));
+  Runtime::SerializationManager::WasiMod = WasiMod;
 
   if (auto Result = VM.loadWasm(InputPath.u8string()); !Result) {
     return EXIT_FAILURE;

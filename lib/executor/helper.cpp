@@ -51,16 +51,18 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
                        RetIt,            // Return PC
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
-                       nullptr,          // ...
+                       FromFuncPtr,          // ...
                        IsTailCall        // For tail-call
     );
 
     // Do the statistics if the statistics turned on.
     if (Stat) {
       // Check host function cost.
-      if (unlikely(!Stat->addCost(HostFunc.getCost()))) {
-        spdlog::error(ErrCode::Value::CostLimitExceeded);
-        return Unexpect(ErrCode::Value::CostLimitExceeded);
+      if (!Status) {
+        if (unlikely(!Stat->addCost(HostFunc.getCost()))) {
+          spdlog::error(ErrCode::Value::CostLimitExceeded);
+          return Unexpect(ErrCode::Value::CostLimitExceeded);
+        }
       }
       // Start recording time of running host function.
       Stat->stopRecordWasm();
@@ -105,7 +107,7 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
                        RetIt,            // Return PC
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
-                       nullptr,          // ...
+                       FromFuncPtr,          // ...
                        IsTailCall        // For tail-call
     );
 

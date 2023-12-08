@@ -922,7 +922,16 @@ public:
       Node = std::move(*Res);
     }
 
-    return generateRandomFdToNode(Node);
+    auto FdRes = generateRandomFdToNode(Node);
+    std::unique_lock Lock(LogMutex);
+    LogName.push_back(funcName::sockOpen);
+    funcArgs args = {.sockOpen = {
+                      .AddressFamily = AddressFamily, 
+                      .SockType = SockType, 
+                      .ReFd = FdRes.value()
+                    }};
+    LogArgs.push_back(args);
+    return FdRes;
   }
 
   WasiExpect<void> sockBind(__wasi_fd_t Fd,
@@ -930,6 +939,17 @@ public:
                             Span<const uint8_t> Address,
                             uint16_t Port) noexcept {
     auto Node = getNodeOrNull(Fd);
+
+    std::unique_lock Lock(LogMutex);
+    LogName.push_back(funcName::sockBind);
+    funcArgs args = {.sockBind = {
+                      .Fd = Fd, 
+                      .AddressFamily = AddressFamily, 
+                      .Address = Address, 
+                      .Port = Port
+                    }};
+    LogArgs.push_back(args);
+
     if (unlikely(!Node)) {
       return WasiUnexpect(__WASI_ERRNO_BADF);
     } else {
@@ -965,6 +985,17 @@ public:
                                Span<const uint8_t> Address,
                                uint16_t Port) noexcept {
     auto Node = getNodeOrNull(Fd);
+    
+    std::unique_lock Lock(LogMutex);
+    LogName.push_back(funcName::sockConnect);
+    funcArgs args = {.sockConnect = {
+                      .Fd = Fd, 
+                      .AddressFamily = AddressFamily, 
+                      .Address = Address, 
+                      .Port = Port
+                    }};
+    LogArgs.push_back(args);
+
     if (unlikely(!Node)) {
       return WasiUnexpect(__WASI_ERRNO_BADF);
     } else {
@@ -1159,6 +1190,84 @@ public:
               cxx20::as_writable_bytes(cxx20::span(Buffer)).begin());
     return std::string(Buffer.data(), Buffer.size());
   }
+
+  WasiExpect<bool> bindFdToNode(std::shared_ptr<VINode> Node, __wasi_fd_t ReFd) {
+    std::unique_lock Lock(FdMutex);
+    bool Success = FdMap.emplace(ReFd, Node).second;
+    return Success;
+  }
+
+  WasiExpect<bool> sockReOpen(__wasi_address_family_t AddressFamily,
+                                   __wasi_sock_type_t SockType,
+                                   __wasi_fd_t ReFd) noexcept {
+
+    std::shared_ptr<VINode> Node;
+    if (auto Res = VINode::sockOpen(AddressFamily, SockType); unlikely(!Res)) {
+      return WasiUnexpect(Res);
+    } else {
+      Node = std::move(*Res);
+    }
+
+    std::unique_lock Lock(LogMutex);
+    LogName.push_back(funcName::sockOpen);
+    funcArgs args = {.sockOpen = {
+                      .AddressFamily = AddressFamily, 
+                      .SockType = SockType, 
+                      .ReFd = ReFd
+                    }};
+    LogArgs.push_back(args);
+
+    bool Success = bindFdToNode(Node, ReFd).value();
+    return Success;
+  }
+  
+  WasiExpect<bool> sockReAccept(__wasi_fd_t Fd,
+                                     __wasi_fdflags_t FdFlags,
+                                     __wasi_fd_t ReFd) noexcept {
+    auto Node = getNodeOrNull(Fd);
+    std::shared_ptr<VINode> NewNode;
+
+    if (auto Res = Node->sockAccept(FdFlags); unlikely(!Res)) {
+      return WasiUnexpect(Res);
+    } else {
+      NewNode = std::move(*Res);
+    }
+
+    bool Success = bindFdToNode(Node, ReFd).value();
+    return Success;
+  }
+
+  enum class funcName {
+    sockOpen,
+    sockBind,
+    sockConnect
+  };
+
+  union funcArgs {
+    struct {
+      __wasi_address_family_t AddressFamily;
+      __wasi_sock_type_t SockType;
+      __wasi_fd_t ReFd;
+    } sockOpen;
+
+    struct {
+      __wasi_fd_t Fd;
+      __wasi_address_family_t AddressFamily;
+      Span<const uint8_t> Address;
+      uint16_t Port;
+    } sockBind;
+
+    struct {
+      __wasi_fd_t Fd;
+      __wasi_address_family_t AddressFamily;
+      Span<const uint8_t> Address;
+      uint16_t Port;
+    } sockConnect;
+  };
+
+  mutable std::shared_mutex LogMutex; ///< Protect Log
+  std::vector<funcName> LogName;
+  std::vector<funcArgs> LogArgs;
 
 private:
   std::vector<std::string> Arguments;

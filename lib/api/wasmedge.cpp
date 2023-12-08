@@ -1654,6 +1654,18 @@ WasmEdge_ExecutorAsyncInvoke(WasmEdge_ExecutorContext *Cxt,
   return nullptr;
 }
 
+WASMEDGE_CAPI_EXPORT void WasmEdge_ExecutorSetStatus(
+    WasmEdge_ExecutorContext *Cxt, const int32_t Status) {
+  if (Cxt) {
+    fromExecutorCxt(Cxt)->Status = Status;
+  }
+}
+WASMEDGE_CAPI_EXPORT int32_t WasmEdge_ExecutorGetStatus(
+    WasmEdge_ExecutorContext *Cxt) {
+  return fromExecutorCxt(Cxt)->Status;
+}
+
+
 WASMEDGE_CAPI_EXPORT void
 WasmEdge_ExecutorDelete(WasmEdge_ExecutorContext *Cxt) {
   delete fromExecutorCxt(Cxt);
