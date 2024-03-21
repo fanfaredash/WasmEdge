@@ -10,6 +10,7 @@
 #include "driver/unitool.h"
 #include "host/wasi/wasimodule.h"
 #include "plugin/plugin.h"
+#include "runtime/serializemgr.h"
 #include "system/winapi.h"
 #include "vm/vm.h"
 
@@ -889,6 +890,38 @@ WASMEDGE_CAPI_EXPORT bool WasmEdge_ConfigureStatisticsIsTimeMeasuring(
     return Cxt->Conf.getStatisticsConfigure().isTimeMeasuring();
   }
   return false;
+}
+
+WASMEDGE_CAPI_EXPORT void
+WasmEdge_ConfigureStatisticsSetSnapShotting(WasmEdge_ConfigureContext *Cxt,
+                                             const bool IsMeasure) {
+  if (Cxt) {
+    Cxt->Conf.getStatisticsConfigure().setSnapShotting(IsMeasure);
+  }
+}
+
+WASMEDGE_CAPI_EXPORT bool WasmEdge_ConfigureStatisticsIsSnapShotting(
+    const WasmEdge_ConfigureContext *Cxt) {
+  if (Cxt) {
+    return Cxt->Conf.getStatisticsConfigure().isSnapShotting();
+  }
+  return false;
+}
+
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_StatisticsSetSnapShotInput(WasmEdge_StatisticsContext *Cxt,
+                                    const char *Path) {
+  if (Cxt) {
+    Runtime::SerializationManager::InputFilePath = Path;
+  }
+}
+
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_StatisticsSetSnapShotOutput(WasmEdge_StatisticsContext *Cxt,
+                                    const char *Path) {
+  if (Cxt) {
+    Runtime::SerializationManager::OutputFilePath = Path;
+  }
 }
 
 WASMEDGE_CAPI_EXPORT void

@@ -22,10 +22,10 @@
 #include "host/wasi/environ.h"
 #include "wasi/api.hpp"
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/variant.hpp>
-#include <boost/serialization/split_free.hpp>
+// #include <boost/archive/text_oarchive.hpp>
+// #include <boost/archive/text_iarchive.hpp>
+// #include <boost/serialization/variant.hpp>
+// #include <boost/serialization/split_free.hpp>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -36,8 +36,35 @@ namespace Runtime {
 
 class SerializationManager {
 public:  
-  typedef boost::archive::text_iarchive InputArchive;
-	typedef boost::archive::text_oarchive OutputArchive;
+  // typedef boost::archive::text_iarchive InputArchive;
+	// typedef boost::archive::text_oarchive OutputArchive;
+
+  class OutputArchive {
+  public:
+      std::ofstream& out;
+
+      OutputArchive(std::ofstream& outStream) : out(outStream) {}
+
+      template<typename T>
+      OutputArchive& operator<<(const T& value) {
+          out << value << " ";  // 将值转换为文本形式并加入空格作为分隔符
+          return *this;
+      }
+  };
+
+  class InputArchive {
+  public:
+      std::ifstream& in;
+
+      InputArchive(std::ifstream& inStream) : in(inStream) {}
+
+      template<typename T>
+      InputArchive& operator>>(T& value) {
+          in >> value;  // 直接从文本中解析出相应类型的值
+          return *this;
+      }
+  };
+  
   using Value = ValVariant;
   using Frame = Runtime::StackManager::Frame;
   using Environ = Host::WASI::Environ;
@@ -45,7 +72,7 @@ public:
 
   static inline constexpr const uint64_t kPageSize = UINT64_C(65536);
   static inline constexpr const int64_t ZipFactor = 16;
-  static inline std::string InputFilePath;
+  static inline std::string InputFilePath = "/dev/null";
   static inline std::string OutputFilePath = "test.meta";
 
   static inline uint64_t ModeFlag = 0;
@@ -62,9 +89,9 @@ public:
     OutputArchive OA{OFS};
     save_stack(OA, StackMgr);
     save_global(OA, StackMgr);
-    save_memory(OA, StackMgr);
     save_pc(OA, PC, FromFuncPtr);
-    save_environ(OA);
+    save_memory(OA, StackMgr);
+    // save_environ(OA);
     OFS.close();
   }
 
@@ -74,9 +101,9 @@ public:
     InputArchive IA{IFS};
     load_stack(IA, StackMgr);
     load_global(IA, StackMgr);
-    load_memory(IA, StackMgr);
     load_pc(IA, StackMgr, PC, FromFuncPtr);
-    load_environ(IA);
+    load_memory(IA, StackMgr);
+    // load_environ(IA);
     IFS.close();
   }
 
@@ -194,11 +221,12 @@ protected:
       if (length) {
         OA << length;
         for(uint64_t j = 0; j < length; j++) {
-          OA << tempVec[j];
+          OA << uint32_t(tempVec[j]);
         }
       }
       if (count) {
-        OA << -count << DataPtr[i - 1];
+        OA << -count << uint32_t(DataPtr[i - 1]);
+        // std::cerr << DataPtr[i - 1] << "\n";
       }
       tempVec.resize(0);
     };
@@ -239,10 +267,12 @@ protected:
     while (count) {
       if (count > 0) {
         for (int64_t i = 0; i < count; i++) {
-          IA >> Buffer[index++];
+          uint32_t tmp;
+          IA >> tmp;
+          Buffer[index++] = tmp;
         }
       } else {
-        uint8_t x;
+        uint32_t x;
         IA >> x;
         for (int64_t i = 0; i < -count; i++) {
           Buffer[index++] = x;
@@ -291,6 +321,7 @@ protected:
       PC = StartIt + InstrId;
     }
 
+  /*
   void save_environ(OutputArchive &OA) {
     auto& Env = WasiMod->getEnv();
     auto& LogName = Env.LogName;
@@ -385,6 +416,7 @@ protected:
       }
     }
   }
+  */
 
 private:
   std::string ArchiveFilePath;

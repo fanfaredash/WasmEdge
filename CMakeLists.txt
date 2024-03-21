@@ -159,7 +159,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0")
 add_executable(main main.cc)
 target_link_libraries(main
 	wasmedge_shared
-  Boost::serialization
 )
 
 include(CPack)

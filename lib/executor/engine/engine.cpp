@@ -64,7 +64,8 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
     
     const Runtime::Instance::FunctionInstance *FuncPtr = &Func;
 
-    if (Runtime::SerializationManager::ModeFlag) {
+    if (Conf.getStatisticsConfigure().isSnapShotting() &&
+        Runtime::SerializationManager::InputFilePath != "/dev/null") {
       auto SerializeMgr = new Runtime::SerializationManager(
         Runtime::SerializationManager::InputFilePath
       );
@@ -1852,6 +1853,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
           // Cost Limit Exceeded: Save snapshot to file.
           if (Conf.getStatisticsConfigure().isSnapShotting()) {
+            // printf("** Output Path: %s\n", Runtime::SerializationManager::OutputFilePath.c_str());
             Runtime::SerializationManager SerializeMgr(
               Runtime::SerializationManager::OutputFilePath
             );

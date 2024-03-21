@@ -7,8 +7,6 @@
 编译 wasmedge 项目的方式如下：
 
 ```bash
-# 更新子模块 boost_c++
-git submodule update --init
 
 # 创建 build 文件夹并编译
 mkdir -p build && cd build
@@ -28,9 +26,6 @@ make -j
 # 如果运行费用充足，则不生成输出快照
 # 关于如何自定义 opcode 费用见下一部分
 ```
-
-仓库同时提供了一个使用 golang 调起执行节点的示例，位于 `/snapcaller/` 路径下；
-  - `snapcaller.go` 提供了两个方法 `WasmRun`、`WasmValidate`，具体使用方法见代码注释。
 
 ## 代码功能指南
 

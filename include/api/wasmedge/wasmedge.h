@@ -851,6 +851,29 @@ WasmEdge_ConfigureStatisticsSetTimeMeasuring(WasmEdge_ConfigureContext *Cxt,
 WASMEDGE_CAPI_EXPORT extern bool WasmEdge_ConfigureStatisticsIsTimeMeasuring(
     const WasmEdge_ConfigureContext *Cxt);
 
+/// Set the snapshotting option for the statistics.
+///
+/// This function is thread-safe.
+///
+/// \param Cxt the WasmEdge_ConfigureContext to set the boolean value.
+/// \param IsMeasure the boolean value to determine to support snapshot when
+/// execution or not after compilation by the AOT compiler.
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_ConfigureStatisticsSetSnapShotting(WasmEdge_ConfigureContext *Cxt,
+                                             const bool IsMeasure);
+
+/// Get the snapshotting option for the statistics.
+///
+/// This function is thread-safe.
+///
+/// \param Cxt the WasmEdge_ConfigureContext to get the boolean value.
+///
+/// \returns the boolean value to determine to support snapshot when
+/// execution or not after compilation by the AOT compiler.
+WASMEDGE_CAPI_EXPORT extern bool WasmEdge_ConfigureStatisticsIsSnapShotting(
+    const WasmEdge_ConfigureContext *Cxt);
+
+
 /// Deletion of the WasmEdge_ConfigureContext.
 ///
 /// After calling this function, the context will be destroyed and should
@@ -918,6 +941,22 @@ WasmEdge_StatisticsSetCostTable(WasmEdge_StatisticsContext *Cxt,
 WASMEDGE_CAPI_EXPORT extern void
 WasmEdge_StatisticsSetCostLimit(WasmEdge_StatisticsContext *Cxt,
                                 const uint64_t Limit);
+
+/// Set the snapshot file input path in execution.
+///
+/// \param Cxt the WasmEdge_StatisticsContext to set the snapshot.
+/// \param Path the input path.
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_StatisticsSetSnapShotInput(WasmEdge_StatisticsContext *Cxt,
+                                    const char *Path);
+
+/// Set the snapshot file output path in execution.
+///
+/// \param Cxt the WasmEdge_StatisticsContext to set the snapshot.
+/// \param Path the output path.
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_StatisticsSetSnapShotOutput(WasmEdge_StatisticsContext *Cxt,
+                                     const char *Path);
 
 /// Clear all data in the WasmEdge_StatisticsContext.
 ///
