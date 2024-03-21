@@ -24,7 +24,14 @@ make -j
 								
 # --snapshot-input 参数为可选，如果不含该参数代表程序从头开始运行
 # 如果运行费用充足，则不生成输出快照
-# 关于如何自定义 opcode 费用见下一部分
+```
+
+编译得到的结果位于：
+```bash
+./build/lib/api/libwasmedge.so.0.0.3
+# WasmEdge 动态链接库
+
+./build/tools/wasmedge/wasmedge
 ```
 
 ## 代码功能指南
@@ -52,7 +59,7 @@ make -j
 ### 序列化部分代码
 
 `include/runtime/serializemgr.h`：
-  - 包含序列化核心类 SerializeManager，基于 boost_c++ 实现。
+  - 包含序列化核心类 SerializeManager；
   - 主要保存栈、全局变量、申请的内存、以及 PC。
   - 需要注意 PC 的记录方式：解释器会把每个 wasm 函数的字节码按顺序保存；
     所以序列化的过程中保存了函数的 ID 与指令的 ID，方便获取对应 PC 值。
