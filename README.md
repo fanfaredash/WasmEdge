@@ -43,7 +43,7 @@ make -j
 ```bash
 LD_LIBRARY_PATH={动态链接库目录} \
 ./build/tools/wasmedge/wasmedge --snapshot-input {输入快照目录路径} \
-																--snapshot-id {输入快照ID} \
+                                --snapshot-id {输入快照ID} \
                                 --snapshot-output {输出快照目录路径} \
                                 --gas-limit {单次运行费用限制} \
                                 [--enable-gas-refill] \
@@ -118,9 +118,9 @@ mkdir ./output
 # 运行矩阵乘法示例程序并生成快照
 LD_LIBRARY_PATH="./build/lib/api" \
 ./build/tools/wasmedge/wasmedge --gas-limit 10000000 \
-																--snapshot-output ./output \
-																--enable-gas-refill \
-																./wasmfiles/matrix_multiplication_cpp_100.wasm run
+                                --snapshot-output ./output \
+                                --enable-gas-refill \
+                                ./wasmfiles/matrix_multiplication_cpp_100.wasm run
 ```
 
 执行完成后观察 `./output/` 目录，发现运行生成了 10 个快照，从 `1.snap`，`1.bin` 到 `10.snap`，`10.bin`，以及 `result.txt`。
@@ -152,10 +152,10 @@ rm ./output/*
 # 从快照4恢复示例程序并生成下一个快照
 LD_LIBRARY_PATH="./build/lib/api" \
 ./build/tools/wasmedge/wasmedge --gas-limit 10000000 \
-																--snapshot-input ./input \
-																--snapshot-id 4 \
-																--snapshot-output ./output \
-																./wasmfiles/matrix_multiplication_cpp_100.wasm run
+                                --snapshot-input ./input \
+                                --snapshot-id 4 \
+                                --snapshot-output ./output \
+                                ./wasmfiles/matrix_multiplication_cpp_100.wasm run
 ```
 
 从快照 4 恢复示例程序需要以下文件：`1.bin`，`2.bin`，`3.bin`，`4.bin`，`4.snap`。
@@ -177,11 +177,11 @@ diff ./output/5.bin ./input/5.bin
 # 从快照4恢复示例程序并生成全部快照
 LD_LIBRARY_PATH="./build/lib/api" \
 ./build/tools/wasmedge/wasmedge --gas-limit 10000000 \
-																--snapshot-input ./input \
-																--snapshot-id 4 \
-																--snapshot-output ./output \
-																--enable-gas-refill \
-																./wasmfiles/matrix_multiplication_cpp_100.wasm run
+                                --snapshot-input ./input \
+                                --snapshot-id 4 \
+                                --snapshot-output ./output \
+                                --enable-gas-refill \
+                                ./wasmfiles/matrix_multiplication_cpp_100.wasm run
 ```
 
 运行完成后，将最终运行结果 `result.txt` 与复制好的备份进行对比：
@@ -202,16 +202,16 @@ diff ./output/result.txt ./input/result.txt
 # fib 程序入口函数名为 fib，接受一个正整数为参数，代表计算数列项数，返回值为对应项
 LD_LIBRARY_PATH="./build/lib/api" \
 ./build/tools/wasmedge/wasmedge --gas-limit 1000000 \
-																--snapshot-output ./output \
+                                --snapshot-output ./output \
                                 --enable-gas-refill \
-																./wasmfiles/fib32.wasm fib 27
+                                ./wasmfiles/fib32.wasm fib 27
 
 # sha256 程序无需提供入口函数，接受一个正整数为参数，代表计算的哈希长度，没有返回值
 LD_LIBRARY_PATH="./build/lib/api" \
 ./build/tools/wasmedge/wasmedge --gas-limit 1000000 \
-																--snapshot-output ./output \
+                                --snapshot-output ./output \
                                 --enable-gas-refill \
-																./wasmfiles/sha256.wasm 65536
+                                ./wasmfiles/sha256.wasm 65536
 ```
 
 
