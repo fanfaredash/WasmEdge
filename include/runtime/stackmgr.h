@@ -218,6 +218,9 @@ private:
   std::vector<Value> ValueStack;
   std::vector<Frame> FrameStack;
   /// @}
+
+  friend class Executor::Executor;
+  friend class Runtime::SerializationManager;
 };
 
 } // namespace Runtime

@@ -2,17 +2,25 @@
 // SPDX-FileCopyrightText: 2019-2022 Second State INC
 
 #include "executor/executor.h"
+#include "runtime/serializemgr.h"
 
 #include <array>
 #include <cstdint>
 #include <cstring>
+
+// #include <chrono>
+#include <iostream>
+// #include <vector>
 
 namespace WasmEdge {
 namespace Executor {
 
 Expect<void> Executor::runExpression(Runtime::StackManager &StackMgr,
                                      AST::InstrView Instrs) {
-  return execute(StackMgr, Instrs.begin(), Instrs.end());
+  auto Res = execute(StackMgr, Instrs.begin(), Instrs.end());
+  Stat->clearCost();
+  spdlog::error("Initializaion function Called. Refill cost pool. Current cost count: {}", Stat->getTotalCost());
+  return Res;
 }
 
 Expect<void>
@@ -60,6 +68,20 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
     // If not terminated, execute the instructions in interpreter mode.
     // For the entering AOT or host functions, the `StartIt` is equal to the end
     // of instruction list, therefore the execution will return immediately.
+
+    if (Conf.getStatisticsConfigure().isSnapShotting()) {
+      auto& SerializeMgr = Runtime::SerializationManager::getInstance();
+      SerializeMgr.set_stack_manager(&StackMgr);
+      if(Runtime::SerializationManager::InputDir != "/dev/null") {
+        const Runtime::Instance::FunctionInstance *FuncPtr = &Func;  
+        SerializeMgr.open("r");
+        SerializeMgr.load(StartIt, FuncPtr);
+        SerializeMgr.close();
+      }
+    }
+
+    // std::cerr << " **** Start: " << StartIt - Func.getInstrs().end() << "\n";
+
     Res = execute(StackMgr, StartIt, Func.getInstrs().end());
   }
 
@@ -92,6 +114,9 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
                                const AST::InstrView::iterator End) {
   AST::InstrView::iterator PC = Start;
   AST::InstrView::iterator PCEnd = End;
+
+  // static std::vector<std::chrono::nanoseconds> TimeCount(65536);
+  // int COUNT = 0;
 
   auto Dispatch = [this, &PC, &StackMgr]() -> Expect<void> {
     const AST::Instruction &Instr = *PC;
@@ -2149,18 +2174,71 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // Add cost. Note: if-else case should be processed additionally.
       if (Conf.getStatisticsConfigure().isCostMeasuring()) {
         if (unlikely(!Stat->addInstrCost(Code))) {
-          const AST::Instruction &Instr = *PC;
-          spdlog::error(
-              ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
-          return Unexpect(ErrCode::Value::CostLimitExceeded);
+
+          Runtime::SerializationManager::GasCost += Stat->getTotalCost();
+          // Cost Limit Exceeded: Save snapshot to file.
+          if (Conf.getStatisticsConfigure().isSnapShotting()) {
+            spdlog::error("Output Path: {}", Runtime::SerializationManager::OutputDir.c_str());
+            auto& SerializeMgr = Runtime::SerializationManager::getInstance();
+            Runtime::SerializationManager::SnapShotId++;
+            // SerializeMgr.set_stack_manager(&StackMgr);
+            SerializeMgr.open("w");
+            SerializeMgr.save(PC);
+            SerializeMgr.close();
+            spdlog::error("Saved snapshot {}.snap", Runtime::SerializationManager::SnapShotId);
+            spdlog::error("Gas Usage: {}", Runtime::SerializationManager::GasCost);
+
+            // std::cerr << " **** InstrCount: " << COUNT << "\n";
+            // std::cerr << " **** End: " << PC - End << "\n";
+
+          }
+        
+          if (Conf.getStatisticsConfigure().isSnapShotting()
+              && Runtime::SerializationManager::AutoRefill) {
+            Stat->clearCost();
+            spdlog::error("Refilled cost pool. Current cost count: {}\n", Stat->getTotalCost());
+            Stat->addInstrCost(Code);
+
+          } else {
+            // 如果没有费用，退出
+            const AST::Instruction &Instr = *PC;
+            spdlog::error(
+                ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
+            return Unexpect(ErrCode::Value::CostLimitExceeded);
+          }
         }
+
       }
     }
+    // auto start = std::chrono::high_resolution_clock::now();
+    
     if (auto Res = Dispatch(); !Res) {
       return Unexpect(Res);
     }
+
+    // auto end = std::chrono::high_resolution_clock::now();
+    // std::chrono::nanoseconds duration = end - start;
+    // TimeCount[static_cast<uint16_t>(PC->getOpCode())] += duration;
+    // COUNT++;
     PC++;
   }
+
+  // double TotalTimeCount = 0;
+  // for (int i = 0; i < 65536; i++) {
+  //   TotalTimeCount += TimeCount[i].count();
+  // }
+  
+  // std::cout << "Total: " << TotalTimeCount << "\n";
+  // for (int i = 0; i < 65536; i++) {
+  //   if (TimeCount[i].count() >= 0.01 * TotalTimeCount) {
+  //     std::cout << OpCodeStr[static_cast<OpCode>(i)] << " " << TimeCount[i].count() << "\n";
+  //     // std::cout << std::hex << i << std::dec <<" " << TimeCount[i].count() << "\n";
+  //   }
+  // }
+  // for (int i = 0; i < 65536; i++) {
+  //   TimeCount[i] = std::chrono::nanoseconds(0);
+  // }
+  
   return {};
 }
 

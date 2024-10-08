@@ -97,3 +97,7 @@ node_modules/
 
 # generated jni files
 bindings/java/wasmedge-java/wasmedge-jni/jni/*.h
+
+# wasmedge output directory
+input/
+output/

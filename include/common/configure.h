@@ -163,7 +163,9 @@ public:
   StatisticsConfigure(const StatisticsConfigure &RHS) noexcept
       : InstrCounting(RHS.InstrCounting.load(std::memory_order_relaxed)),
         CostMeasuring(RHS.CostMeasuring.load(std::memory_order_relaxed)),
-        TimeMeasuring(RHS.TimeMeasuring.load(std::memory_order_relaxed)) {}
+        TimeMeasuring(RHS.TimeMeasuring.load(std::memory_order_relaxed)), 
+        SnapShotting(RHS.SnapShotting.load(std::memory_order_relaxed)) {}
+        // 如果出现了新的参数，拷贝构造函数需要追加修改
 
   void setInstructionCounting(bool IsCount) noexcept {
     InstrCounting.store(IsCount, std::memory_order_relaxed);
@@ -189,6 +191,14 @@ public:
     return TimeMeasuring.load(std::memory_order_relaxed);
   }
 
+  bool isSnapShotting() const noexcept {
+    return SnapShotting.load(std::memory_order_relaxed);
+  }
+
+  void setSnapShotting(bool IsSnapShot) noexcept {
+    SnapShotting.store(IsSnapShot, std::memory_order_relaxed);
+  }
+
   void setCostLimit(uint64_t Cost) noexcept {
     CostLimit.store(Cost, std::memory_order_relaxed);
   }
@@ -201,6 +211,7 @@ private:
   std::atomic<bool> InstrCounting = false;
   std::atomic<bool> CostMeasuring = false;
   std::atomic<bool> TimeMeasuring = false;
+  std::atomic<bool> SnapShotting = false;
 
   std::atomic<uint64_t> CostLimit = std::numeric_limits<uint64_t>::max();
 };

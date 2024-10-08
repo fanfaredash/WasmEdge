@@ -129,7 +129,8 @@ public:
       : Conf(Conf) {
     if (Conf.getStatisticsConfigure().isInstructionCounting() ||
         Conf.getStatisticsConfigure().isCostMeasuring() ||
-        Conf.getStatisticsConfigure().isTimeMeasuring()) {
+        Conf.getStatisticsConfigure().isTimeMeasuring() ||
+        Conf.getStatisticsConfigure().isSnapShotting()) {
       Stat = S;
     } else {
       Stat = nullptr;

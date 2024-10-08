@@ -27,6 +27,8 @@
 #include <set>
 #include <utility>
 
+#include <iostream>
+
 namespace WasmEdge {
 namespace Runtime {
 namespace Instance {
@@ -275,6 +277,10 @@ public:
     if (unlikely(!checkAccessBound(Offset, Length))) {
       spdlog::error(ErrCode::Value::MemoryOutOfBounds);
       spdlog::error(ErrInfo::InfoBoundary(Offset, Length, getBoundIdx()));
+
+      std::cerr << Offset << "\n";
+      std::cerr << Length << "\n";
+
       return Unexpect(ErrCode::Value::MemoryOutOfBounds);
     }
     // Load the data to the value.

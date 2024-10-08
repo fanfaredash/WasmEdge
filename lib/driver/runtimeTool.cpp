@@ -8,6 +8,7 @@
 #include "common/version.h"
 #include "driver/tool.h"
 #include "host/wasi/wasimodule.h"
+#include "runtime/serializemgr.h"
 #include "vm/vm.h"
 
 #include <chrono>
@@ -103,15 +104,37 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     Conf.getStatisticsConfigure().setCostMeasuring(true);
     Conf.getStatisticsConfigure().setCostLimit(
         static_cast<uint32_t>(Opt.GasLim.value().back()));
+    Runtime::SerializationManager::UnitLimit = static_cast<uint32_t>(Opt.GasLim.value().back());
   }
   if (Opt.MemLim.value().size() > 0) {
     Conf.getRuntimeConfigure().setMaxMemoryPage(
         static_cast<uint32_t>(Opt.MemLim.value().back()));
   }
+  if (Opt.ConfEnableGasRefill.value()) {
+    Conf.getStatisticsConfigure().setSnapShotting(true);
+    Conf.getStatisticsConfigure().setCostMeasuring(true);
+    Runtime::SerializationManager::AutoRefill = true;
+  }
+  if (!Opt.SnapshotInputDir.value().empty()) {
+    Conf.getStatisticsConfigure().setSnapShotting(true);
+    Conf.getStatisticsConfigure().setCostMeasuring(true);
+    Runtime::SerializationManager::InputDir = Opt.SnapshotInputDir.value().back();
+  }
+  if (!Opt.SnapshotOutputDir.value().empty()) {
+    Conf.getStatisticsConfigure().setSnapShotting(true);
+    Conf.getStatisticsConfigure().setCostMeasuring(true);
+    Runtime::SerializationManager::OutputDir = Opt.SnapshotOutputDir.value().back();
+  }
+  if (!Opt.SnapshotInputId.value().empty()) {
+    Conf.getStatisticsConfigure().setSnapShotting(true);
+    Conf.getStatisticsConfigure().setCostMeasuring(true);
+    Runtime::SerializationManager::SnapShotId = Opt.SnapshotInputId.value().back();
+  }
   if (Opt.ConfEnableAllStatistics.value()) {
     Conf.getStatisticsConfigure().setInstructionCounting(true);
     Conf.getStatisticsConfigure().setCostMeasuring(true);
     Conf.getStatisticsConfigure().setTimeMeasuring(true);
+    Conf.getStatisticsConfigure().setSnapShotting(true);
   } else {
     if (Opt.ConfEnableInstructionCounting.value()) {
       Conf.getStatisticsConfigure().setInstructionCounting(true);
@@ -121,6 +144,10 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     }
     if (Opt.ConfEnableTimeMeasuring.value()) {
       Conf.getStatisticsConfigure().setTimeMeasuring(true);
+    }
+    if (Opt.ConfEnableSnapshotting.value()) {
+      Conf.getStatisticsConfigure().setCostMeasuring(true);
+      Conf.getStatisticsConfigure().setSnapShotting(true);
     }
   }
   if (Opt.ConfEnableJIT.value()) {
@@ -187,6 +214,51 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
           .u8string(),
       Opt.Args.value(), Opt.Env.value());
 
+  auto ExportResult = [&](WasmEdge::Expect<std::vector<
+    std::pair<WasmEdge::ValVariant, WasmEdge::ValType>>> Result) {
+    // 如果有snapshot相关参数，则输出result至文件
+    if (Conf.getStatisticsConfigure().isSnapShotting()) {
+      std::ofstream OFS;
+      OFS.open(Runtime::SerializationManager::OutputDir + "/result.txt");
+      OFS << 0 << '\n';
+      OFS << Runtime::SerializationManager::SnapShotId << '\n';
+      for (size_t I = 0; I < Result->size(); ++I) {
+        switch ((*Result)[I].second.getCode()) {
+        case TypeCode::I32:
+          OFS << (*Result)[I].first.get<uint32_t>() << ' ';
+          break;
+        case TypeCode::I64:
+          OFS << (*Result)[I].first.get<uint64_t>() << ' ';
+          break;
+        case TypeCode::F32:
+          OFS << (*Result)[I].first.get<float>() << ' ';
+          break;
+        case TypeCode::F64:
+          OFS << (*Result)[I].first.get<double>() << ' ';
+          break;
+        case TypeCode::V128:
+          OFS << (*Result)[I].first.get<uint128_t>() << ' ';
+          break;
+        /// TODO: FuncRef and ExternRef
+        default:
+          break;
+        }
+      }
+      OFS.close();
+    }
+  };
+
+  auto ExportExit = [&](int ExitCode) {
+    // 如果有snapshot相关参数，则输出result至文件
+    if (Conf.getStatisticsConfigure().isSnapShotting()) {
+      std::ofstream OFS;
+      OFS.open(Runtime::SerializationManager::OutputDir + "/result.txt");
+      OFS << ExitCode << '\n';
+      OFS << Runtime::SerializationManager::SnapShotId << '\n';
+      OFS.close();
+    }
+  };
+
   if (EnterCommandMode) {
     // command mode
     auto AsyncResult = VM.asyncExecute("_start"sv);
@@ -197,9 +269,11 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     }
     if (auto Result = AsyncResult.get();
         Result || Result.error() == ErrCode::Value::Terminated) {
+      ExportExit(static_cast<int>(WasiMod->getEnv().getExitCode()));
       return static_cast<int>(WasiMod->getEnv().getExitCode());
     } else {
       // It indicates that the execution of wasm has been aborted
+      ExportExit(128 + SIGABRT);
       return 128 + SIGABRT;
     }
   } else {
@@ -214,27 +288,37 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     using namespace std::literals::string_literals;
     const auto InitFunc = "_initialize"s;
 
-    bool HasInit = false;
+    // 异步运行不稳定，尝试去掉 _initialize 函数
+    // bool HasInit = false;
+    // AST::FunctionType FuncType;
+
+    // for (const auto &Func : VM.getFunctionList()) {
+    //   if (Func.first == InitFunc) {
+    //     HasInit = true;
+    //   } else if (Func.first == FuncName) {
+    //     FuncType = Func.second;
+    //   }
+    // }
+
+    // if (HasInit) {
+    //   auto AsyncResult = VM.asyncExecute(InitFunc);
+    //   if (Timeout.has_value()) {
+    //     if (!AsyncResult.waitUntil(*Timeout)) {
+    //       AsyncResult.cancel();
+    //     }
+    //   }
+    //   // 初始化函数应该不用输出result
+    //   if (auto Result = AsyncResult.get(); unlikely(!Result)) {
+    //     // It indicates that the execution of wasm has been aborted
+    //     ExportExit(128 + SIGABRT);
+    //     return 128 + SIGABRT;
+    //   }
+    // }
+
     AST::FunctionType FuncType;
-
     for (const auto &Func : VM.getFunctionList()) {
-      if (Func.first == InitFunc) {
-        HasInit = true;
-      } else if (Func.first == FuncName) {
+      if (Func.first == FuncName) {
         FuncType = Func.second;
-      }
-    }
-
-    if (HasInit) {
-      auto AsyncResult = VM.asyncExecute(InitFunc);
-      if (Timeout.has_value()) {
-        if (!AsyncResult.waitUntil(*Timeout)) {
-          AsyncResult.cancel();
-        }
-      }
-      if (auto Result = AsyncResult.get(); unlikely(!Result)) {
-        // It indicates that the execution of wasm has been aborted
-        return 128 + SIGABRT;
       }
     }
 
@@ -298,6 +382,7 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
       }
     }
     if (auto Result = AsyncResult.get()) {
+      ExportResult(Result);
       /// Print results.
       for (size_t I = 0; I < Result->size(); ++I) {
         switch ((*Result)[I].second.getCode()) {
@@ -324,6 +409,7 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
       return EXIT_SUCCESS;
     } else {
       // It indicates that the execution of wasm has been aborted
+      ExportExit(128 + SIGABRT);
       return 128 + SIGABRT;
     }
   }

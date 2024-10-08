@@ -49,6 +49,7 @@ namespace Runtime {
 
 class StoreManager;
 class CallingFrame;
+class SerializationManager;
 
 namespace Instance {
 
@@ -251,6 +252,7 @@ protected:
   friend class Executor::Executor;
   friend class ComponentInstance;
   friend class Runtime::CallingFrame;
+  friend class Runtime::SerializationManager;
 
   /// Create and copy the defined type to this module instance.
   void addDefinedType(const AST::SubType &SType) {
